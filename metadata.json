@@ -1,0 +1,5 @@
+{
+  "name": "Uchi Vistorias",
+  "description": "Aplicativo profissional para vistorias imobiliárias com registro de fotos, mobiliário e estado de conservação.",
+  "requestFramePermissions": ["camera"]
+}

@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "Inspection": {
+      "title": "Inspection",
+      "description": "A property inspection record.",
+      "type": "object",
+      "properties": {
+        "address": { "type": "string", "description": "Property address (legacy/quick access)" },
+        "property": {
+          "type": "object",
+          "properties": {
+            "address": { "type": "string" },
+            "complement": { "type": "string" },
+            "neighborhood": { "type": "string" },
+            "city": { "type": "string" },
+            "cep": { "type": "string" }
+          },
+          "required": ["address", "neighborhood", "city", "cep"]
+        },
+        "type": { "type": "string", "enum": ["entrada", "saida", "rotina", "venda"], "description": "Type of inspection" },
+        "date": { "type": "string", "format": "date-time", "description": "Date of inspection" },
+        "status": { "type": "string", "enum": ["draft", "completed"], "description": "Status of the inspection" },
+        "inspectorId": { "type": "string", "description": "UID of the inspector" },
+        "inspector": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "cpf": { "type": "string" }
+          },
+          "required": ["name", "cpf"]
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "cpf": { "type": "string" }
+          }
+        },
+        "tenant": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "cpf": { "type": "string" }
+          }
+        },
+        "buyer": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "cpf": { "type": "string" }
+          }
+        },
+        "seller": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "cpf": { "type": "string" }
+          }
+        }
+      },
+      "required": ["address", "property", "type", "date", "status", "inspectorId", "inspector"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "A room within a property.",
+      "type": "object",
+      "properties": {
+        "inspectionId": { "type": "string", "description": "ID of the parent inspection" },
+        "name": { "type": "string", "description": "Room name (e.g., Sala, Cozinha)" },
+        "order": { "type": "integer", "description": "Display order" }
+      },
+      "required": ["inspectionId", "name", "order"]
+    },
+    "Item": {
+      "title": "Item",
+      "description": "An item or element within a room.",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string", "description": "ID of the parent room" },
+        "name": { "type": "string", "description": "Item name (e.g., Pintura, Piso, Armário)" },
+        "condition": { "type": "string", "enum": ["novo", "bom", "regular", "ruim"], "description": "Condition of the item" },
+        "description": { "type": "string", "description": "Detailed description" },
+        "hasFurniture": { "type": "boolean", "description": "Whether this item includes furniture" },
+        "furnitureDescription": { "type": "string", "description": "Description of the furniture" },
+        "photos": { "type": "array", "items": { "type": "string" }, "description": "List of photo URLs (base64 for now)" }
+      },
+      "required": ["roomId", "name", "condition"]
+    }
+  },
+  "firestore": {
+    "/inspections/{inspectionId}": { "schema": "Inspection", "description": "Main inspection records" },
+    "/inspections/{inspectionId}/rooms/{roomId}": { "schema": "Room", "description": "Rooms in an inspection" },
+    "/inspections/{inspectionId}/rooms/{roomId}/items/{itemId}": { "schema": "Item", "description": "Items in a room" }
+  }
+}

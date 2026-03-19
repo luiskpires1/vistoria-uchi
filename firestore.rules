@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: inspections
+    // Document ID: auto-generated
+    // Fields:
+    //   - address: string (required)
+    //   - type: string (required, enum: entrada, saida, rotina, venda)
+    //   - date: string (required, ISO 8601)
+    //   - status: string (required, enum: draft, completed)
+    //   - inspectorId: string (required, matches auth.uid)
+    //
+    // Collection: inspections/{id}/rooms
+    // Fields:
+    //   - name: string (required)
+    //   - order: number (required)
+    //
+    // Collection: inspections/{id}/rooms/{roomId}/items
+    // Fields:
+    //   - name: string (required)
+    //   - condition: string (required, enum: novo, bom, regular, ruim)
+    //   - description: string (optional)
+    //   - hasFurniture: bool (optional)
+    //   - furnitureDescription: string (optional)
+    //   - photos: list (optional)
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidInspection(data) {
+      return data.address is string && data.address.size() > 0 && data.address.size() < 500 &&
+             data.type in ['entrada', 'saida', 'rotina', 'venda'] &&
+             data.status in ['draft', 'completed'] &&
+             data.date is string &&
+             data.keys().hasAll(['address', 'type', 'date', 'status', 'inspectorId']);
+    }
+
+    match /inspections/{inspectionId} {
+      allow read, delete: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidInspection(request.resource.data);
+      allow update: if isAuthenticated() && isValidInspection(request.resource.data);
+
+      match /rooms/{roomId} {
+        allow read, write: if isAuthenticated();
+
+        match /items/{itemId} {
+          allow read, write: if isAuthenticated();
+        }
+      }
+    }
+  }
+}
