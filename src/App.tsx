@@ -27,29 +27,22 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { generateInspectionPDF } from './services/pdfService';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  onAuthStateChanged, 
-  signOut, 
-  User,
-  signInAnonymously
-} from 'firebase/auth';
+  motion, 
+  AnimatePresence 
+} from 'motion/react';
 import { 
   collection, 
   addDoc, 
   query, 
-  where, 
   onSnapshot, 
   doc, 
   updateDoc, 
   deleteDoc, 
   orderBy, 
-  getDocs,
-  Timestamp
+  getDocs
 } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { db } from './firebase';
 import { 
   Inspection, 
   Room, 
@@ -93,17 +86,11 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
+      userId: 'uchi-imoveis-standard',
+      email: 'contato@uchiimoveis.com.br',
+      emailVerified: true,
+      isAnonymous: false,
+      providerInfo: []
     },
     operationType,
     path
@@ -193,9 +180,16 @@ const Badge = ({ children, variant = 'neutral' }: any) => {
 
 // --- Main App ---
 
+const STANDARD_USER = {
+  uid: 'uchi-imoveis-standard',
+  displayName: 'Uchi Imóveis',
+  email: 'contato@uchiimoveis.com.br',
+  isAnonymous: false
+};
+
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user] = useState<any>(STANDARD_USER);
+  const [loading, setLoading] = useState(false);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [view, setView] = useState<'dashboard' | 'new' | 'edit'>('dashboard');
   const [currentInspection, setCurrentInspection] = useState<Inspection | null>(null);
@@ -228,32 +222,15 @@ export default function App() {
     testConnection();
   }, []);
 
-  // Auth
+  // Auth removed as per user request
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      console.log("Auth state changed:", u ? `User: ${u.uid} (Anonymous: ${u.isAnonymous})` : "No user");
-      if (!u) {
-        try {
-          console.log("Attempting anonymous sign-in...");
-          await signInAnonymously(auth);
-        } catch (error) {
-          console.error("Anonymous login failed. Ensure 'Anonymous' provider is enabled in Firebase Console.", error);
-          setLoading(false);
-        }
-      } else {
-        setUser(u);
-        setLoading(false);
-      }
-    });
-    return () => unsubscribe();
+    setLoading(false);
   }, []);
 
   // Fetch Inspections
   useEffect(() => {
-    if (!user) return;
     const q = query(
       collection(db, 'inspections'), 
-      where('inspectorId', '==', user.uid),
       orderBy('date', 'desc')
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -261,7 +238,7 @@ export default function App() {
       setInspections(data);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'inspections'));
     return () => unsubscribe();
-  }, [user]);
+  }, []);
 
   // Fetch Rooms when editing
   useEffect(() => {
@@ -292,15 +269,12 @@ export default function App() {
   }, [currentInspection, selectedRoom]);
 
   const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login failed", error);
-    }
+    // Login removed as per user request
   };
 
-  const handleLogout = () => signOut(auth);
+  const handleLogout = () => {
+    // Logout removed as per user request
+  };
 
   const createInspection = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -634,16 +608,10 @@ export default function App() {
           <span className="font-bold text-xl tracking-tight">Uchi Vistorias</span>
         </div>
         <div className="flex items-center gap-4">
-          <div className="hidden md:block text-right">
-            <p className="text-xs font-medium text-brand-blue">{user?.displayName || (user?.isAnonymous ? 'Visitante' : 'Não Autenticado')}</p>
-            <p className="text-[10px] text-zinc-500">{user?.email || (user?.isAnonymous ? 'Acesso Anônimo' : 'Faça login para salvar dados')}</p>
+          <div className="text-right">
+            <p className="text-xs font-medium text-brand-blue">{user.displayName}</p>
+            <p className="text-[10px] text-zinc-500">{user.email}</p>
           </div>
-          {user && !user.isAnonymous && <Button variant="ghost" onClick={handleLogout} icon={LogOut} className="p-2" />}
-          {(!user || user.isAnonymous) && (
-            <Button variant="ghost" onClick={handleLogin} className="text-xs px-2 py-1 bg-zinc-100 hover:bg-zinc-200">
-              Entrar com Google
-            </Button>
-          )}
         </div>
       </header>
 
@@ -660,13 +628,7 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold">Minhas Vistorias</h2>
                 <Button 
-                  onClick={() => {
-                    if (user) {
-                      setView('new');
-                    } else {
-                      handleLogin();
-                    }
-                  }} 
+                  onClick={() => setView('new')} 
                   icon={Plus}
                 >
                   Nova Vistoria
@@ -679,14 +641,7 @@ export default function App() {
                     <ClipboardList className="text-zinc-400" />
                   </div>
                   <h3 className="text-lg font-medium">Nenhuma vistoria encontrada</h3>
-                  {!user ? (
-                    <div className="mt-4 space-y-4">
-                      <p className="text-zinc-500">Você precisa estar autenticado para ver ou criar vistorias.</p>
-                      <Button onClick={handleLogin} className="mx-auto" icon={Home}>Entrar com Google</Button>
-                    </div>
-                  ) : (
-                    <p className="text-zinc-500">Comece criando sua primeira vistoria imobiliária.</p>
-                  )}
+                  <p className="text-zinc-500">Comece criando sua primeira vistoria imobiliária.</p>
                 </div>
               ) : (
                 <div className="grid gap-4">

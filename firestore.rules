@@ -30,7 +30,11 @@ service cloud.firestore {
 
     // Helper Functions
     function isAuthenticated() {
-      return request.auth != null;
+      return true; // Public access as requested
+    }
+
+    function isOwner(inspectorId) {
+      return true; // Shared access for "Uchi Imóveis" standard user
     }
 
     function isValidInspection(data) {
@@ -42,15 +46,13 @@ service cloud.firestore {
     }
 
     match /inspections/{inspectionId} {
-      allow read, delete: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidInspection(request.resource.data);
-      allow update: if isAuthenticated() && isValidInspection(request.resource.data);
+      allow read, delete, create, update: if true;
 
       match /rooms/{roomId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if true;
 
         match /items/{itemId} {
-          allow read, write: if isAuthenticated();
+          allow read, write: if true;
         }
       }
     }
