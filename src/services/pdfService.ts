@@ -26,6 +26,8 @@ interface InspectionData {
   seller?: Person;
   rooms: {
     name: string;
+    description?: string;
+    photos?: string[];
     items: {
       name: string;
       condition: string;
@@ -41,34 +43,40 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   
-  // Logo
+  // Company Header Background
+  doc.setFillColor(0, 58, 90);
+  doc.rect(0, 0, pageWidth, 35, 'F');
+
+  // Company Header
+  const logoUrl = '/logo.png';
   try {
-    const logoUrl = 'https://ais-dev-rwp7gfhhrnm5kvzj7mq5rl-136253274741.us-east1.run.app/logo.png';
-    doc.addImage(logoUrl, 'PNG', 20, 10, 30, 30);
+    // Attempt to add logo, but don't crash if it fails
+    // Using a more robust approach by checking if it's a valid image first or just catching the error
+    doc.addImage(logoUrl, 'PNG', 20, 10, 15, 15);
   } catch (e) {
-    console.error('Error adding logo to PDF:', e);
+    console.warn('Could not load logo for PDF, skipping...', e);
+    // If logo fails, we just continue without it
   }
 
-  // Header - Real Estate Info
-  doc.setFontSize(10);
-  doc.setTextColor(0, 58, 90);
+  doc.setFontSize(16);
+  doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.text('UCHI IMÓVEIS', 55, 15);
-  
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text('Endereço: Porto Alegre, RS', 55, 20);
-  doc.text('CRECI: 28561 | CNPJ: 63.595.950/0001-26', 55, 24);
-  doc.text('EMAIL: contato@uchiimoveis.com', 55, 28);
-  doc.text('TELEFONE: 51 992852975', 55, 32);
+  doc.text('Uchi Imóveis', 38, 16);
 
-  doc.setFontSize(18);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.text('CNPJ 63.595.950/0001-26 | CRECI 28561', 38, 21);
+  doc.text('E-mail: contato@uchiimoveis.com', 38, 25);
+  doc.text('Endereço: Rua Alcides Gonzaga 240, Boa Vista, Porto Alegre - RS, CEP: 90480-020', 38, 29);
+
+  // Title
+  doc.setFontSize(20);
   doc.setTextColor(0, 58, 90);
   doc.setFont('helvetica', 'bold');
-  doc.text('LAUDO DE VISTORIA IMOBILIÁRIA', pageWidth / 2, 50, { align: 'center' });
+  doc.text('LAUDO DE VISTORIA IMOBILIÁRIA', pageWidth / 2, 48, { align: 'center' });
   
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   doc.setFont('helvetica', 'normal');
   doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 56, { align: 'center' });
@@ -77,60 +85,60 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.setDrawColor(230, 230, 230);
   doc.line(20, 62, pageWidth - 20, 62);
   
-  doc.setFontSize(11);
+  doc.setFontSize(12);
   doc.setTextColor(0, 58, 90);
   doc.setFont('helvetica', 'bold');
-  doc.text('DADOS DO IMÓVEL', 20, 70);
+  doc.text('DADOS DO IMÓVEL', 20, 72);
   
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(50, 50, 50);
-  doc.text(`Endereço: ${data.property.address}${data.property.complement ? ', ' + data.property.complement : ''}`, 20, 76);
-  doc.text(`Bairro: ${data.property.neighborhood}`, 20, 81);
-  doc.text(`Cidade: ${data.property.city} - CEP: ${data.property.cep}`, 20, 86);
+  doc.text(`Endereço: ${data.property.address}${data.property.complement ? ', ' + data.property.complement : ''}`, 20, 79);
+  doc.text(`Bairro: ${data.property.neighborhood}`, 20, 85);
+  doc.text(`Cidade: ${data.property.city} - CEP: ${data.property.cep}`, 20, 91);
 
   // Inspection Info
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 58, 90);
-  doc.text('DADOS DA VISTORIA', 120, 70);
+  doc.text('DADOS DA VISTORIA', 120, 72);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(50, 50, 50);
-  doc.text(`Tipo: ${data.type.toUpperCase()}`, 120, 76);
-  doc.text(`Data: ${new Date(data.date).toLocaleDateString('pt-BR')}`, 120, 81);
-  doc.text(`Status: ${data.status === 'completed' ? 'FINALIZADA' : 'EM RASCUNHO'}`, 120, 86);
+  doc.text(`Tipo: ${data.type.toUpperCase()}`, 120, 79);
+  doc.text(`Data: ${new Date(data.date).toLocaleDateString('pt-BR')}`, 120, 85);
+  doc.text(`Status: ${data.status === 'completed' ? 'FINALIZADA' : 'EM RASCUNHO'}`, 120, 91);
 
   // Parties Info
-  doc.line(20, 92, pageWidth - 20, 92);
+  doc.line(20, 99, pageWidth - 20, 99);
   
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 58, 90);
-  doc.text('PARTES ENVOLVIDAS', 20, 100);
+  doc.text('PARTES ENVOLVIDAS', 20, 107);
   
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(50, 50, 50);
   
-  let partiesY = 106;
+  let partiesY = 114;
   doc.text(`Vistoriador: ${data.inspector.name} (CPF: ${data.inspector.cpf})`, 20, partiesY);
-  partiesY += 5;
+  partiesY += 6;
 
   if (data.type === 'venda') {
     if (data.seller) {
       doc.text(`Vendedor: ${data.seller.name} (CPF: ${data.seller.cpf})`, 20, partiesY);
-      partiesY += 5;
+      partiesY += 6;
     }
     if (data.buyer) {
       doc.text(`Comprador: ${data.buyer.name} (CPF: ${data.buyer.cpf})`, 20, partiesY);
-      partiesY += 5;
+      partiesY += 6;
     }
   } else {
     if (data.owner) {
       doc.text(`Proprietário: ${data.owner.name} (CPF: ${data.owner.cpf})`, 20, partiesY);
-      partiesY += 5;
+      partiesY += 6;
     }
     if (data.tenant) {
       doc.text(`Inquilino: ${data.tenant.name} (CPF: ${data.tenant.cpf})`, 20, partiesY);
-      partiesY += 5;
+      partiesY += 6;
     }
   }
 
@@ -147,7 +155,51 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 58, 90);
     doc.text(room.name, 20, currentY);
-    currentY += 10;
+    currentY += 8;
+
+    if (room.description) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(100, 100, 100);
+      const splitDesc = doc.splitTextToSize(`Descrição: ${room.description}`, pageWidth - 40);
+      doc.text(splitDesc, 20, currentY);
+      currentY += (splitDesc.length * 5) + 5;
+    } else {
+      currentY += 2;
+    }
+
+    // Room Photos
+    if (room.photos && room.photos.length > 0) {
+      if (currentY > 230) {
+        doc.addPage();
+        currentY = 20;
+      }
+      
+      let photoX = 20;
+      const photoSize = 40;
+      const spacing = 5;
+
+      for (const photo of room.photos) {
+        try {
+          if (photoX + photoSize > pageWidth - 20) {
+            photoX = 20;
+            currentY += photoSize + spacing;
+          }
+
+          if (currentY + photoSize > 280) {
+            doc.addPage();
+            currentY = 20;
+            photoX = 20;
+          }
+
+          doc.addImage(photo, 'JPEG', photoX, currentY, photoSize, photoSize);
+          photoX += photoSize + spacing;
+        } catch (e) {
+          console.error('Error adding room image to PDF:', e);
+        }
+      }
+      currentY += photoSize + 10;
+    }
 
     const tableData = room.items.map(item => [
       item.name,
@@ -217,6 +269,12 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     doc.setPage(i);
     doc.setFontSize(10);
     doc.setTextColor(150, 150, 150);
+    doc.text(
+      'Uchi Imóveis',
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 15,
+      { align: 'center' }
+    );
     doc.text(
       `Página ${i} de ${pageCount}`,
       pageWidth / 2,

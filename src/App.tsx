@@ -207,6 +207,38 @@ export default function App() {
   const [isAddingItemLoading, setIsAddingItemLoading] = useState(false);
   const [newInspectionType, setNewInspectionType] = useState<InspectionType>('entrada');
 
+  const currentRoom = rooms.find(r => r.id === selectedRoom?.id) || selectedRoom;
+
+  const compressImage = (base64Str: string, maxWidth = 600, maxHeight = 600, quality = 0.6): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+    });
+  };
+
   // Test Connection
   useEffect(() => {
     const testConnection = async () => {
@@ -451,6 +483,8 @@ export default function App() {
         
         return {
           name: room.name,
+          description: room.description,
+          photos: room.photos || [],
           items: itemsSnapshot.docs.map(itemDoc => {
             const item = itemDoc.data();
             return {
@@ -494,6 +528,44 @@ export default function App() {
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}/rooms/${roomId}`);
     }
+  };
+
+  const updateRoomDetails = async (roomId: string, updates: Partial<Room>) => {
+    if (!currentInspection) return;
+    try {
+      await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms`, roomId), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}/rooms/${roomId}`);
+    }
+  };
+
+  const handleRoomPhotoUpload = async (roomId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const room = rooms.find(r => r.id === roomId);
+    if (room && (room.photos?.length || 0) >= 10) {
+      alert('Limite de 10 fotos por ambiente atingido para evitar erros de armazenamento.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64String = reader.result as string;
+      const compressedBase64 = await compressImage(base64String);
+      if (room) {
+        await updateRoomDetails(roomId, { photos: [...(room.photos || []), compressedBase64] });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeRoomPhoto = async (roomId: string, photoIndex: number) => {
+    const room = rooms.find(r => r.id === roomId);
+    if (!room || !room.photos) return;
+    const newPhotos = [...room.photos];
+    newPhotos.splice(photoIndex, 1);
+    await updateRoomDetails(roomId, { photos: newPhotos });
   };
 
   const addItem = async () => {
@@ -561,12 +633,18 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const item = items.find(i => i.id === itemId);
+    if (item && (item.photos?.length || 0) >= 10) {
+      alert('Limite de 10 fotos por item atingido para evitar erros de armazenamento.');
+      return;
+    }
+
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result as string;
-      const item = items.find(i => i.id === itemId);
+      const compressedBase64 = await compressImage(base64String);
       if (item) {
-        await updateItem(itemId, { photos: [...item.photos, base64String] });
+        await updateItem(itemId, { photos: [...item.photos, compressedBase64] });
       }
     };
     reader.readAsDataURL(file);
@@ -599,7 +677,7 @@ export default function App() {
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-200">
             <img 
-              src="https://ais-dev-rwp7gfhhrnm5kvzj7mq5rl-136253274741.us-east1.run.app/logo.png" 
+              src="/logo.png" 
               alt="Uchi Vistorias Logo" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -995,7 +1073,7 @@ export default function App() {
 
                 {/* Items List */}
                 <div className="md:col-span-2 space-y-6">
-                  {!selectedRoom ? (
+                  {!currentRoom ? (
                     <div className="h-64 flex flex-col items-center justify-center bg-zinc-100 rounded-3xl text-zinc-400 border border-dashed border-zinc-300">
                       <Info size={32} className="mb-2" />
                       <p>Selecione um cômodo para começar</p>
@@ -1003,9 +1081,48 @@ export default function App() {
                   ) : (
                     <div className="space-y-6">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-2xl font-bold">{selectedRoom.name}</h3>
+                        <h3 className="text-2xl font-bold">{currentRoom.name}</h3>
                         <Button onClick={() => setIsAddingItem(true)} icon={Plus} variant="secondary">Adicionar Item</Button>
                       </div>
+
+                      <Card className="p-6 space-y-4 bg-zinc-50/50 border-dashed border-2 border-zinc-200">
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Descrição do Ambiente</label>
+                          <textarea
+                            placeholder="Descreva o estado geral deste cômodo..."
+                            value={currentRoom.description || ''}
+                            onChange={(e) => updateRoomDetails(currentRoom.id, { description: e.target.value })}
+                            className="w-full p-3 rounded-xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[100px] bg-white"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Fotos do Ambiente</label>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {currentRoom.photos?.map((photo, idx) => (
+                              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden group border border-zinc-200">
+                                <img src={photo} alt={`Room ${idx}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                <button 
+                                  onClick={() => removeRoomPhoto(currentRoom.id, idx)}
+                                  className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ))}
+                            <label className="aspect-square rounded-xl border-2 border-dashed border-zinc-300 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-brand-blue hover:bg-brand-blue/5 transition-all text-zinc-400 hover:text-brand-blue">
+                              <Camera size={24} />
+                              <span className="text-[10px] font-bold uppercase">Adicionar Foto</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={(e) => handleRoomPhotoUpload(currentRoom.id, e)} 
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </Card>
 
                       {isAddingItem && (
                         <Card className="p-4 border-brand-blue border-2">

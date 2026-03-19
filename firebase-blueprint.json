@@ -67,6 +67,8 @@
       "properties": {
         "inspectionId": { "type": "string", "description": "ID of the parent inspection" },
         "name": { "type": "string", "description": "Room name (e.g., Sala, Cozinha)" },
+        "description": { "type": "string", "description": "General description of the room" },
+        "photos": { "type": "array", "items": { "type": "string" }, "description": "List of room photo URLs (base64)" },
         "order": { "type": "integer", "description": "Display order" }
       },
       "required": ["inspectionId", "name", "order"]

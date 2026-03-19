@@ -36,6 +36,8 @@ export interface Room {
   id: string;
   inspectionId: string;
   name: string;
+  description?: string;
+  photos?: string[];
   order: number;
 }
 
