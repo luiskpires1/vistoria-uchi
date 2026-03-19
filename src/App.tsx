@@ -601,7 +601,7 @@ export default function App() {
     await updateItem(itemId, { photos: newPhotos });
   };
 
-  if (loading || !user) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50">
         <div className="animate-pulse flex flex-col items-center gap-4">
@@ -630,12 +630,12 @@ export default function App() {
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden md:block text-right">
-            <p className="text-xs font-medium text-brand-blue">{user?.displayName || 'Visitante'}</p>
-            <p className="text-[10px] text-zinc-500">{user?.email || 'Acesso Anônimo'}</p>
+            <p className="text-xs font-medium text-brand-blue">{user?.displayName || (user?.isAnonymous ? 'Visitante' : 'Não Autenticado')}</p>
+            <p className="text-[10px] text-zinc-500">{user?.email || (user?.isAnonymous ? 'Acesso Anônimo' : 'Faça login para salvar dados')}</p>
           </div>
           {user && !user.isAnonymous && <Button variant="ghost" onClick={handleLogout} icon={LogOut} className="p-2" />}
-          {user && user.isAnonymous && (
-            <Button variant="ghost" onClick={handleLogin} className="text-xs px-2 py-1">
+          {(!user || user.isAnonymous) && (
+            <Button variant="ghost" onClick={handleLogin} className="text-xs px-2 py-1 bg-zinc-100 hover:bg-zinc-200">
               Entrar com Google
             </Button>
           )}
@@ -663,7 +663,14 @@ export default function App() {
                     <ClipboardList className="text-zinc-400" />
                   </div>
                   <h3 className="text-lg font-medium">Nenhuma vistoria encontrada</h3>
-                  <p className="text-zinc-500">Comece criando sua primeira vistoria imobiliária.</p>
+                  {!user ? (
+                    <div className="mt-4 space-y-4">
+                      <p className="text-zinc-500">Você precisa estar autenticado para ver ou criar vistorias.</p>
+                      <Button onClick={handleLogin} className="mx-auto" icon={Home}>Entrar com Google</Button>
+                    </div>
+                  ) : (
+                    <p className="text-zinc-500">Comece criando sua primeira vistoria imobiliária.</p>
+                  )}
                 </div>
               ) : (
                 <div className="grid gap-4">
