@@ -231,11 +231,13 @@ export default function App() {
   // Auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      console.log("Auth state changed:", u ? `User: ${u.uid} (Anonymous: ${u.isAnonymous})` : "No user");
       if (!u) {
         try {
+          console.log("Attempting anonymous sign-in...");
           await signInAnonymously(auth);
         } catch (error) {
-          console.error("Anonymous login failed", error);
+          console.error("Anonymous login failed. Ensure 'Anonymous' provider is enabled in Firebase Console.", error);
           setLoading(false);
         }
       } else {
@@ -323,7 +325,10 @@ export default function App() {
     const sellerName = formData.get('sellerName') as string;
     const sellerCpf = formData.get('sellerCpf') as string;
 
-    if (!user) return;
+    if (!user) {
+      alert("Você precisa estar autenticado para criar uma vistoria. Verifique se o login anônimo está ativo ou entre com sua conta Google.");
+      return;
+    }
 
     setIsCreating(true);
     try {
@@ -654,7 +659,18 @@ export default function App() {
             >
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold">Minhas Vistorias</h2>
-                <Button onClick={() => setView('new')} icon={Plus}>Nova Vistoria</Button>
+                <Button 
+                  onClick={() => {
+                    if (user) {
+                      setView('new');
+                    } else {
+                      handleLogin();
+                    }
+                  }} 
+                  icon={Plus}
+                >
+                  Nova Vistoria
+                </Button>
               </div>
 
               {inspections.length === 0 ? (
