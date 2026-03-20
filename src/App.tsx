@@ -271,16 +271,16 @@ const Login = ({ onLogin }: { onLogin: () => void }) => {
         className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-zinc-100"
       >
         <div className="flex flex-col items-center mb-8">
-          <div className="w-20 h-20 rounded-2xl overflow-hidden mb-4 shadow-lg border border-zinc-100">
+          <div className="w-24 h-24 rounded-full overflow-hidden mb-4 shadow-lg border border-zinc-100 bg-white">
             <img 
               src={LOGO_URL} 
-              alt="Uchi Imóveis Logo" 
+              alt="Uchi Vistorias Logo" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
               onError={(e) => {
                 // Fallback to home icon if image fails
                 (e.target as any).style.display = 'none';
-                (e.target as any).parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-brand-blue/10"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0047BB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>';
+                (e.target as any).parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-brand-blue/10"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#003a5a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>';
               }}
             />
           </div>
@@ -945,6 +945,11 @@ export default function App() {
               alt="Uchi Vistorias Logo" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                // Fallback to home icon if image fails
+                (e.target as any).style.display = 'none';
+                (e.target as any).parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-brand-blue/10"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#003a5a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>';
+              }}
             />
           </div>
           <span className="font-bold text-xl tracking-tight">Uchi Vistorias</span>
@@ -1574,7 +1579,7 @@ export default function App() {
 
       {/* Footer / Mobile Nav */}
       {view === 'edit' && currentInspection && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-zinc-200 flex justify-center">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-zinc-200 flex justify-center z-50">
           <Button 
             className="w-full max-w-md py-4 shadow-xl shadow-black/10" 
             icon={Save}
