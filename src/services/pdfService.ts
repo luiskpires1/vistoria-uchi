@@ -24,6 +24,7 @@ interface InspectionData {
   tenant?: Person;
   buyer?: Person;
   seller?: Person;
+  propertyDescription?: string;
   rooms: {
     name: string;
     description?: string;
@@ -143,7 +144,28 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     }
   }
 
+  // Property Description Section
   let currentY = partiesY + 10;
+  
+  if (data.propertyDescription) {
+    if (currentY > 250) {
+      doc.addPage();
+      currentY = 20;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 58, 90);
+    doc.text('DESCRIÇÃO DO IMÓVEL', 20, currentY);
+    currentY += 7;
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(50, 50, 50);
+    doc.setFontSize(10);
+    const splitPropDesc = doc.splitTextToSize(data.propertyDescription, pageWidth - 40);
+    doc.text(splitPropDesc, 20, currentY);
+    currentY += (splitPropDesc.length * 5) + 10;
+  } else {
+    currentY += 5;
+  }
 
   // Rooms and Items
   for (const room of data.rooms) {

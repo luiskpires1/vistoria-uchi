@@ -30,6 +30,7 @@ export interface Inspection {
   tenant?: Person; // For entrada, rotina, saida
   buyer?: Person; // For venda
   seller?: Person; // For venda
+  propertyDescription?: string;
 }
 
 export interface Room {

@@ -495,6 +495,16 @@ export default function App() {
     return () => unsubscribe();
   }, [currentInspection, selectedRoom]);
 
+  // Keep currentInspection updated when inspections list changes
+  useEffect(() => {
+    if (currentInspection) {
+      const updated = inspections.find(i => i.id === currentInspection.id);
+      if (updated && updated.propertyDescription !== currentInspection.propertyDescription) {
+        setCurrentInspection(updated);
+      }
+    }
+  }, [inspections]);
+
   const createInspection = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -768,6 +778,7 @@ export default function App() {
         property: inspection.property || { address: inspection.address, neighborhood: '', city: '', cep: '' },
         type: inspection.type,
         date: inspection.date,
+        propertyDescription: inspection.propertyDescription,
         status: inspection.status,
         inspector: inspection.inspector || { name: '', cpf: '' },
         owner: inspection.owner,
@@ -792,6 +803,17 @@ export default function App() {
       setEditingRoomName('');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}/rooms/${roomId}`);
+    }
+  };
+
+  const updatePropertyDescription = async (description: string) => {
+    if (!currentInspection) return;
+    try {
+      await updateDoc(doc(db, 'inspections', currentInspection.id), {
+        propertyDescription: description
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
     }
   };
 
@@ -1270,6 +1292,23 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 text-zinc-500 uppercase text-xs font-bold tracking-widest">
+                  <FileText size={14} />
+                  <span>Descrição Geral do Imóvel</span>
+                </div>
+                <textarea
+                  placeholder="Descreva as características gerais do imóvel (ex: pintura, conservação, observações importantes)..."
+                  value={currentInspection.propertyDescription || ''}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setCurrentInspection(prev => prev ? { ...prev, propertyDescription: newValue } : null);
+                  }}
+                  onBlur={(e) => updatePropertyDescription(e.target.value)}
+                  className="w-full p-4 rounded-2xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[120px] bg-zinc-50/50"
+                />
               </div>
 
               <div className="grid md:grid-cols-3 gap-8">
