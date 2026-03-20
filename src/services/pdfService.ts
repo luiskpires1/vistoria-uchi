@@ -52,7 +52,8 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   try {
     // Attempt to add logo, but don't crash if it fails
     // Using a more robust approach by checking if it's a valid image first or just catching the error
-    doc.addImage(logoUrl, 'PNG', 15, 5, 25, 25);
+    // Increased size to 30x30 and aligned with text at x=45
+    doc.addImage(logoUrl, 'PNG', 10, 2.5, 30, 30);
   } catch (e) {
     console.warn('Could not load logo for PDF, skipping...', e);
     // If logo fails, we just continue without it

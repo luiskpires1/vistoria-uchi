@@ -29,7 +29,8 @@ import {
 import { generateInspectionPDF } from './services/pdfService';
 import { 
   motion, 
-  AnimatePresence 
+  AnimatePresence,
+  Reorder
 } from 'motion/react';
 import { 
   collection, 
@@ -271,7 +272,7 @@ const Login = ({ onLogin }: { onLogin: () => void }) => {
         className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-zinc-100"
       >
         <div className="flex flex-col items-center mb-8">
-          <div className="w-24 h-24 rounded-full overflow-hidden mb-4 shadow-lg border border-zinc-100 bg-white">
+          <div className="w-32 h-32 rounded-full overflow-hidden mb-4 shadow-lg border border-zinc-100 bg-white">
             <img 
               src={LOGO_URL} 
               alt="Uchi Vistorias Logo" 
@@ -280,7 +281,7 @@ const Login = ({ onLogin }: { onLogin: () => void }) => {
               onError={(e) => {
                 // Fallback to home icon if image fails
                 (e.target as any).style.display = 'none';
-                (e.target as any).parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-brand-blue/10"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#003a5a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>';
+                (e.target as any).parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-brand-blue/10"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#003a5a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>';
               }}
             />
           </div>
@@ -718,11 +719,15 @@ export default function App() {
     const roomB = rooms[newIndex];
 
     try {
+      // Swap order values directly for more robust reordering
+      const orderA = roomA.order;
+      const orderB = roomB.order;
+
       await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms`, roomA.id), {
-        order: newIndex
+        order: orderB
       });
       await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms`, roomB.id), {
-        order: index
+        order: orderA
       });
     } catch (error) {
       console.error('Error moving room:', error);
@@ -869,11 +874,15 @@ export default function App() {
     const itemB = items[newIndex];
 
     try {
+      // Swap order values directly for more robust reordering
+      const orderA = itemA.order;
+      const orderB = itemB.order;
+
       await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`, itemA.id), {
-        order: newIndex
+        order: orderB
       });
       await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`, itemB.id), {
-        order: index
+        order: orderA
       });
     } catch (error) {
       console.error('Error moving item:', error);
@@ -935,7 +944,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-zinc-50 text-brand-blue font-sans pb-20">
+      <div className="min-h-screen bg-zinc-50 text-brand-blue font-sans pb-32">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-bottom border-zinc-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -1327,21 +1336,21 @@ export default function App() {
                             >
                               {room.name}
                             </button>
-                            <div className={`absolute right-2 top-1/2 -translate-y-1/2 flex gap-0.5 transition-all opacity-0 group-hover:opacity-100`}>
+                            <div className={`absolute right-2 top-1/2 -translate-y-1/2 flex gap-0.5 transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100`}>
                               <div className="flex flex-col">
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); moveRoom(index, 'up'); }}
                                   disabled={index === 0}
-                                  className={`p-0.5 rounded disabled:opacity-10 ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
+                                  className={`p-1 rounded disabled:opacity-10 ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
                                 >
-                                  <ChevronUp size={14} />
+                                  <ChevronUp size={16} />
                                 </button>
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); moveRoom(index, 'down'); }}
                                   disabled={index === rooms.length - 1}
-                                  className={`p-0.5 rounded disabled:opacity-10 ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
+                                  className={`p-1 rounded disabled:opacity-10 ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
                                 >
-                                  <ChevronDown size={14} />
+                                  <ChevronDown size={16} />
                                 </button>
                               </div>
                               <button 
@@ -1404,9 +1413,9 @@ export default function App() {
                                 <img src={photo} alt={`Room ${idx}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 <button 
                                   onClick={() => removeRoomPhoto(currentRoom.id, idx)}
-                                  className="absolute top-1 right-1 p-1 bg-red-500/80 text-white rounded-full sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
+                                  className="absolute top-1 right-1 p-1 bg-red-500/60 text-white rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
                                 >
-                                  <X size={14} />
+                                  <X size={12} />
                                 </button>
                               </div>
                             ))}
@@ -1541,7 +1550,7 @@ export default function App() {
                                       <img src={photo} alt="Vistoria" className="w-full h-full object-cover" />
                                       <button 
                                         onClick={() => removePhoto(item.id, idx)}
-                                        className="absolute top-1 right-1 bg-red-500/80 text-white p-1 rounded-full sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
+                                        className="absolute top-1 right-1 bg-red-500/80 text-white p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
                                       >
                                         <X size={12} />
                                       </button>
@@ -1579,7 +1588,7 @@ export default function App() {
 
       {/* Footer / Mobile Nav */}
       {view === 'edit' && currentInspection && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-zinc-200 flex justify-center z-50">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-zinc-200 flex justify-center z-[100]">
           <Button 
             className="w-full max-w-md py-4 shadow-xl shadow-black/10" 
             icon={Save}
