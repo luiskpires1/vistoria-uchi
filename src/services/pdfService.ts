@@ -52,7 +52,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   try {
     // Attempt to add logo, but don't crash if it fails
     // Using a more robust approach by checking if it's a valid image first or just catching the error
-    doc.addImage(logoUrl, 'PNG', 20, 10, 15, 15);
+    doc.addImage(logoUrl, 'PNG', 15, 5, 25, 25);
   } catch (e) {
     console.warn('Could not load logo for PDF, skipping...', e);
     // If logo fails, we just continue without it
@@ -61,14 +61,14 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.setFontSize(16);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.text('Uchi Imóveis', 38, 16);
+  doc.text('Uchi Imóveis', 45, 13);
 
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(255, 255, 255);
-  doc.text('CNPJ 63.595.950/0001-26 | CRECI 28561', 38, 21);
-  doc.text('E-mail: contato@uchiimoveis.com', 38, 25);
-  doc.text('Endereço: Rua Alcides Gonzaga 240, Boa Vista, Porto Alegre - RS, CEP: 90480-020', 38, 29);
+  doc.text('CNPJ 63.595.950/0001-26 | CRECI 28561', 45, 19);
+  doc.text('E-mail: contato@uchiimoveis.com', 45, 24);
+  doc.text('Endereço: Rua Alcides Gonzaga 240, Boa Vista, Porto Alegre - RS, CEP: 90480-020', 45, 29);
 
   // Title
   doc.setFontSize(20);
