@@ -1399,7 +1399,7 @@ export default function App() {
                                 <img src={photo} alt={`Room ${idx}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 <button 
                                   onClick={() => removeRoomPhoto(currentRoom.id, idx)}
-                                  className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                  className="absolute top-1 right-1 p-1 bg-red-500/80 text-white rounded-full sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
                                 >
                                   <X size={14} />
                                 </button>
@@ -1536,7 +1536,7 @@ export default function App() {
                                       <img src={photo} alt="Vistoria" className="w-full h-full object-cover" />
                                       <button 
                                         onClick={() => removePhoto(item.id, idx)}
-                                        className="absolute top-1 right-1 bg-brand-blue/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                        className="absolute top-1 right-1 bg-red-500/80 text-white p-1 rounded-full sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
                                       >
                                         <X size={12} />
                                       </button>
