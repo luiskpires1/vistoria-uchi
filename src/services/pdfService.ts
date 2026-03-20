@@ -201,18 +201,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text(`Fotos do Ambiente - ${room.name}`, 20, currentY);
-      currentY += 7;
-
-      if (room.description) {
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(80, 80, 80);
-        const splitRoomDesc = doc.splitTextToSize(`Observações do Ambiente: ${room.description}`, pageWidth - 40);
-        doc.text(splitRoomDesc, 20, currentY);
-        currentY += (splitRoomDesc.length * 5) + 5;
-      } else {
-        currentY += 3;
-      }
+      currentY += 10;
 
       let photoX = 20;
       const photoSize = 80; 
