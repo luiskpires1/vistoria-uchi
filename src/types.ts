@@ -31,6 +31,7 @@ export interface Inspection {
   buyer?: Person; // For venda
   seller?: Person; // For venda
   propertyDescription?: string;
+  inspectorOpinion?: string;
 }
 
 export interface Room {

@@ -499,7 +499,7 @@ export default function App() {
   useEffect(() => {
     if (currentInspection) {
       const updated = inspections.find(i => i.id === currentInspection.id);
-      if (updated && updated.propertyDescription !== currentInspection.propertyDescription) {
+      if (updated && (updated.propertyDescription !== currentInspection.propertyDescription || updated.inspectorOpinion !== currentInspection.inspectorOpinion)) {
         setCurrentInspection(updated);
       }
     }
@@ -562,14 +562,21 @@ export default function App() {
       const docRef = await addDoc(collection(db, 'inspections'), inspectionData);
 
       // Pre-populate default rooms and items
-      const defaultRooms = ['Quarto', 'Cozinha', 'Sala', 'Banheiro'].sort((a, b) => a.localeCompare(b));
+      // "Chaves" is always first and has no items
+      await addDoc(collection(db, `inspections/${docRef.id}/rooms`), {
+        inspectionId: docRef.id,
+        name: 'Chaves',
+        order: 0
+      });
+
+      const otherRooms = ['Quarto', 'Cozinha', 'Sala', 'Banheiro'].sort((a, b) => a.localeCompare(b));
       const defaultItems = ['Parede', 'Rodapé', 'Piso', 'Pintura', 'Portas', 'Janelas', 'Teto', 'Mobiliário'].sort((a, b) => a.localeCompare(b));
       
-      for (let i = 0; i < defaultRooms.length; i++) {
+      for (let i = 0; i < otherRooms.length; i++) {
         const roomRef = await addDoc(collection(db, `inspections/${docRef.id}/rooms`), {
           inspectionId: docRef.id,
-          name: defaultRooms[i],
-          order: i
+          name: otherRooms[i],
+          order: i + 1 // Start from 1 because Chaves is 0
         });
 
         for (let j = 0; j < defaultItems.length; j++) {
@@ -779,6 +786,7 @@ export default function App() {
         type: inspection.type,
         date: inspection.date,
         propertyDescription: inspection.propertyDescription,
+        inspectorOpinion: inspection.inspectorOpinion,
         status: inspection.status,
         inspector: inspection.inspector || { name: '', cpf: '' },
         owner: inspection.owner,
@@ -811,6 +819,17 @@ export default function App() {
     try {
       await updateDoc(doc(db, 'inspections', currentInspection.id), {
         propertyDescription: description
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
+    }
+  };
+
+  const updateInspectorOpinion = async (opinion: string) => {
+    if (!currentInspection) return;
+    try {
+      await updateDoc(doc(db, 'inspections', currentInspection.id), {
+        inspectorOpinion: opinion
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
@@ -1307,6 +1326,21 @@ export default function App() {
                     setCurrentInspection(prev => prev ? { ...prev, propertyDescription: newValue } : null);
                   }}
                   onBlur={(e) => updatePropertyDescription(e.target.value)}
+                  className="w-full p-4 rounded-2xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[120px] bg-zinc-50/50"
+                />
+
+                <div className="flex items-center gap-2 text-zinc-500 uppercase text-xs font-bold tracking-widest pt-4">
+                  <FileText size={14} />
+                  <span>Parecer do Vistoriador</span>
+                </div>
+                <textarea
+                  placeholder="Descreva o parecer final da vistoria (ex: o imóvel encontra-se em perfeitas condições para entrega)..."
+                  value={currentInspection.inspectorOpinion || ''}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setCurrentInspection(prev => prev ? { ...prev, inspectorOpinion: newValue } : null);
+                  }}
+                  onBlur={(e) => updateInspectorOpinion(e.target.value)}
                   className="w-full p-4 rounded-2xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[120px] bg-zinc-50/50"
                 />
               </div>
