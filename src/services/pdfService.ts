@@ -170,23 +170,39 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
     // Room Photos
     if (room.photos && room.photos.length > 0) {
-      if (currentY > 230) {
+      if (currentY > 200) {
         doc.addPage();
         currentY = 20;
       }
       
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Fotos do Ambiente - ${room.name}`, 20, currentY);
+      currentY += 7;
+
+      if (room.description) {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        const splitRoomDesc = doc.splitTextToSize(`Observações do Ambiente: ${room.description}`, pageWidth - 40);
+        doc.text(splitRoomDesc, 20, currentY);
+        currentY += (splitRoomDesc.length * 5) + 5;
+      } else {
+        currentY += 3;
+      }
+
       let photoX = 20;
-      const photoSize = 40;
-      const spacing = 5;
+      const photoSize = 80; 
+      const spacing = 10;
 
       for (const photo of room.photos) {
         try {
-          if (photoX + photoSize > pageWidth - 20) {
+          if (photoX + photoSize > pageWidth - 15) {
             photoX = 20;
             currentY += photoSize + spacing;
           }
 
-          if (currentY + photoSize > 280) {
+          if (currentY + photoSize > 270) {
             doc.addPage();
             currentY = 20;
             photoX = 20;
@@ -198,7 +214,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
           console.error('Error adding room image to PDF:', e);
         }
       }
-      currentY += photoSize + 10;
+      currentY += photoSize + 15;
     }
 
     const tableData = room.items.map(item => [
@@ -222,45 +238,135 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
     currentY = (doc as any).lastAutoTable.finalY + 10;
 
-    // Photos for this room
-    const photos = room.items.flatMap(item => item.photos);
-    if (photos.length > 0) {
-      if (currentY > 230) {
-        doc.addPage();
-        currentY = 20;
-      }
-      
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Fotos - ${room.name}`, 20, currentY);
-      currentY += 10;
-
-      let photoX = 20;
-      const photoSize = 40;
-      const spacing = 5;
-
-      for (const photo of photos) {
-        try {
-          // Check if we need a new row or page
-          if (photoX + photoSize > pageWidth - 20) {
-            photoX = 20;
-            currentY += photoSize + spacing;
-          }
-
-          if (currentY + photoSize > 280) {
-            doc.addPage();
-            currentY = 20;
-            photoX = 20;
-          }
-
-          doc.addImage(photo, 'JPEG', photoX, currentY, photoSize, photoSize);
-          photoX += photoSize + spacing;
-        } catch (e) {
-          console.error('Error adding image to PDF:', e);
+    // Photos for each item in this room
+    for (const item of room.items) {
+      if (item.photos && item.photos.length > 0) {
+        if (currentY > 200) {
+          doc.addPage();
+          currentY = 20;
         }
+        
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 58, 90);
+        const itemTitle = `Fotos - ${room.name} - ${item.name}${item.hasFurniture ? ' - Com Avaria' : ''}`;
+        doc.text(itemTitle, 20, currentY);
+        currentY += 7;
+
+        // Observations (Description)
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        const obsText = item.description || 'Sem observações';
+        const splitObs = doc.splitTextToSize(`Observações: ${obsText}`, pageWidth - 40);
+        doc.text(splitObs, 20, currentY);
+        currentY += (splitObs.length * 5) + 2;
+
+        // Damage Description
+        if (item.hasFurniture && item.furnitureDescription) {
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(150, 0, 0); // Red for damage description
+          const splitAvaria = doc.splitTextToSize(`Descrição da Avaria: ${item.furnitureDescription}`, pageWidth - 40);
+          doc.text(splitAvaria, 20, currentY);
+          currentY += (splitAvaria.length * 5) + 5;
+          doc.setTextColor(0, 58, 90); // Reset color
+        } else {
+          currentY += 5;
+        }
+
+        let photoX = 20;
+        const photoSize = 80; 
+        const spacing = 10;
+
+        for (const photo of item.photos) {
+          try {
+            // Check if we need a new row or page
+            if (photoX + photoSize > pageWidth - 15) {
+              photoX = 20;
+              currentY += photoSize + spacing;
+            }
+
+            if (currentY + photoSize > 270) {
+              doc.addPage();
+              currentY = 20;
+              photoX = 20;
+            }
+
+            doc.addImage(photo, 'JPEG', photoX, currentY, photoSize, photoSize);
+            photoX += photoSize + spacing;
+          } catch (e) {
+            console.error('Error adding item image to PDF:', e);
+          }
+        }
+        currentY += photoSize + 20;
       }
-      currentY += photoSize + 20;
     }
+  }
+
+  // Signatures Section
+  if (currentY > 200) {
+    doc.addPage();
+    currentY = 30;
+  } else {
+    currentY += 20;
+  }
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 58, 90);
+  doc.text('TERMO DE ENCERRAMENTO E ASSINATURAS', pageWidth / 2, currentY, { align: 'center' });
+  currentY += 15;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(50, 50, 50);
+  const closureText = "As partes acima identificadas declaram estar de acordo com o estado de conservação do imóvel descrito neste laudo de vistoria, ratificando todas as informações e fotos aqui constantes.";
+  const splitClosure = doc.splitTextToSize(closureText, pageWidth - 40);
+  doc.text(splitClosure, 20, currentY);
+  currentY += (splitClosure.length * 5) + 20;
+
+  const sigWidth = 65;
+  const sigSpacing = 20;
+  const totalWidth = (sigWidth * 2) + sigSpacing;
+  const startX = (pageWidth - totalWidth) / 2;
+
+  // Row 1: Vistoriador and Owner/Buyer
+  // Vistoriador
+  doc.setDrawColor(150, 150, 150);
+  doc.line(startX, currentY, startX + sigWidth, currentY);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Vistoriador', startX + sigWidth / 2, currentY + 5, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.inspector.name, startX + sigWidth / 2, currentY + 10, { align: 'center' });
+  doc.text(`CPF: ${data.inspector.cpf}`, startX + sigWidth / 2, currentY + 14, { align: 'center' });
+
+  // Owner/Buyer
+  const secondLabel = data.type === 'venda' ? 'Comprador' : 'Proprietário';
+  const secondPerson = data.type === 'venda' ? data.buyer : data.owner;
+  if (secondPerson && secondPerson.name) {
+    const x = startX + sigWidth + sigSpacing;
+    doc.line(x, currentY, x + sigWidth, currentY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(secondLabel, x + sigWidth / 2, currentY + 5, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(secondPerson.name, x + sigWidth / 2, currentY + 10, { align: 'center' });
+    doc.text(`CPF: ${secondPerson.cpf}`, x + sigWidth / 2, currentY + 14, { align: 'center' });
+  }
+
+  currentY += 35;
+
+  // Row 2: Tenant/Seller
+  const thirdLabel = data.type === 'venda' ? 'Vendedor' : 'Inquilino';
+  const thirdPerson = data.type === 'venda' ? data.seller : data.tenant;
+  if (thirdPerson && thirdPerson.name) {
+    const x = (pageWidth - sigWidth) / 2;
+    doc.line(x, currentY, x + sigWidth, currentY);
+    doc.setFont('helvetica', 'bold');
+    doc.text(thirdLabel, x + sigWidth / 2, currentY + 5, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(thirdPerson.name, x + sigWidth / 2, currentY + 10, { align: 'center' });
+    doc.text(`CPF: ${thirdPerson.cpf}`, x + sigWidth / 2, currentY + 14, { align: 'center' });
   }
 
   // Footer on each page

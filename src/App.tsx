@@ -99,6 +99,22 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+const formatCPF = (value: string) => {
+  return value
+    .replace(/\D/g, '')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+    .replace(/(-\d{2})\d+?$/, '$1');
+};
+
+const formatCEP = (value: string) => {
+  return value
+    .replace(/\D/g, '')
+    .replace(/(\d{5})(\d)/, '$1-$2')
+    .replace(/(-\d{3})\d+?$/, '$1');
+};
+
 class ErrorBoundary extends (React.Component as any) {
   constructor(props: any) {
     super(props);
@@ -170,11 +186,151 @@ const Badge = ({ children, variant = 'neutral' }: any) => {
     success: 'bg-emerald-100 text-emerald-700',
     warning: 'bg-amber-100 text-amber-700',
     info: 'bg-blue-100 text-blue-700',
+    danger: 'bg-red-100 text-red-700',
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${variants[variant]}`}>
       {children}
     </span>
+  );
+};
+
+const Modal = ({ isOpen, onClose, title, children, footer }: any) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+      >
+        <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
+          <h3 className="text-xl font-bold text-zinc-900">{title}</h3>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="p-6">
+          {children}
+        </div>
+        {footer && (
+          <div className="p-6 bg-zinc-50 border-t border-zinc-100 flex justify-end gap-3">
+            {footer}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+};
+
+const Toast = ({ isOpen, message, type = 'info' }: any) => {
+  if (!isOpen) return null;
+  const colors: any = {
+    success: 'bg-emerald-500',
+    error: 'bg-red-500',
+    info: 'bg-brand-blue'
+  };
+  return (
+    <motion.div 
+      initial={{ y: 50, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 50, opacity: 0 }}
+      className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl text-white font-medium shadow-xl flex items-center gap-3 ${colors[type]}`}
+    >
+      {type === 'success' && <CheckCircle2 size={20} />}
+      {type === 'error' && <X size={20} />}
+      {type === 'info' && <Info size={20} />}
+      {message}
+    </motion.div>
+  );
+};
+
+// --- Constants ---
+
+const LOGO_URL = '/logo.png';
+
+const Login = ({ onLogin }: { onLogin: () => void }) => {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === 'Uchi03++') {
+      localStorage.setItem('uchi_logged_in', 'true');
+      onLogin();
+    } else {
+      setError('Senha incorreta. Tente novamente.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-zinc-100"
+      >
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-20 h-20 rounded-2xl overflow-hidden mb-4 shadow-lg border border-zinc-100">
+            <img 
+              src={LOGO_URL} 
+              alt="Uchi Imóveis Logo" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                // Fallback to home icon if image fails
+                (e.target as any).style.display = 'none';
+                (e.target as any).parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-brand-blue/10"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0047BB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>';
+              }}
+            />
+          </div>
+          <h1 className="text-2xl font-bold text-zinc-900">Uchi Imóveis</h1>
+          <p className="text-zinc-500 text-sm">Acesse o sistema de vistorias</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-zinc-700">Usuário</label>
+            <input 
+              type="text" 
+              value="Uchi Imóveis" 
+              disabled 
+              className="w-full px-4 py-3 rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-500 outline-none cursor-not-allowed"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-zinc-700">Senha</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Digite sua senha"
+              required
+              className="w-full px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all"
+            />
+          </div>
+
+          {error && (
+            <motion.p 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-red-500 text-xs font-medium"
+            >
+              {error}
+            </motion.p>
+          )}
+
+          <button 
+            type="submit"
+            className="w-full bg-brand-blue text-white py-3 rounded-xl font-bold hover:bg-brand-blue/90 transition-all shadow-lg shadow-brand-blue/20 flex items-center justify-center gap-2"
+          >
+            Entrar
+            <ChevronRight size={18} />
+          </button>
+        </form>
+      </motion.div>
+    </div>
   );
 };
 
@@ -188,6 +344,7 @@ const STANDARD_USER = {
 };
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('uchi_logged_in') === 'true');
   const [user] = useState<any>(STANDARD_USER);
   const [loading, setLoading] = useState(false);
   const [inspections, setInspections] = useState<Inspection[]>([]);
@@ -198,6 +355,43 @@ export default function App() {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState(false);
+  const [isEditingProperty, setIsEditingProperty] = useState(false);
+  const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.target.value = formatCPF(e.target.value);
+  };
+  const handleCEPChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.target.value = formatCEP(e.target.value);
+  };
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+  const [toast, setToast] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info'
+  });
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ isOpen: true, message, type });
+    setTimeout(() => setToast(prev => ({ ...prev, isOpen: false })), 3000);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('uchi_logged_in');
+    setIsLoggedIn(false);
+  };
   const [newRoomName, setNewRoomName] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
@@ -300,14 +494,6 @@ export default function App() {
     return () => unsubscribe();
   }, [currentInspection, selectedRoom]);
 
-  const handleLogin = async () => {
-    // Login removed as per user request
-  };
-
-  const handleLogout = () => {
-    // Logout removed as per user request
-  };
-
   const createInspection = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -332,7 +518,7 @@ export default function App() {
     const sellerCpf = formData.get('sellerCpf') as string;
 
     if (!user) {
-      alert("Você precisa estar autenticado para criar uma vistoria. Verifique se o login anônimo está ativo ou entre com sua conta Google.");
+      showToast("Você precisa estar autenticado para criar uma vistoria.", "error");
       return;
     }
 
@@ -395,11 +581,85 @@ export default function App() {
     }
   };
 
-  const deleteInspection = async (id: string) => {
+  const deleteInspection = (id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Vistoria',
+      message: 'Tem certeza que deseja excluir esta vistoria permanentemente?',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'inspections', id));
+          if (currentInspection?.id === id) {
+            setView('dashboard');
+            setCurrentInspection(null);
+            setSelectedRoom(null);
+          }
+          showToast('Vistoria excluída com sucesso!', 'success');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `inspections/${id}`);
+        }
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const handleUpdateProperty = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!currentInspection) return;
+
+    const formData = new FormData(e.currentTarget);
+    const address = formData.get('address') as string;
+    const complement = formData.get('complement') as string;
+    const neighborhood = formData.get('neighborhood') as string;
+    const city = formData.get('city') as string;
+    const cep = formData.get('cep') as string;
+
+    const inspectorName = formData.get('inspectorName') as string;
+    const inspectorCpf = formData.get('inspectorCpf') as string;
+
+    const ownerName = formData.get('ownerName') as string;
+    const ownerCpf = formData.get('ownerCpf') as string;
+    const tenantName = formData.get('tenantName') as string;
+    const tenantCpf = formData.get('tenantCpf') as string;
+
+    const buyerName = formData.get('buyerName') as string;
+    const buyerCpf = formData.get('buyerCpf') as string;
+    const sellerName = formData.get('sellerName') as string;
+    const sellerCpf = formData.get('sellerCpf') as string;
+
     try {
-      await deleteDoc(doc(db, 'inspections', id));
+      const updateData: any = {
+        address, // Legacy
+        property: {
+          address,
+          complement,
+          neighborhood,
+          city,
+          cep
+        },
+        inspector: { name: inspectorName, cpf: inspectorCpf }
+      };
+
+      if (currentInspection.type === 'venda') {
+        updateData.buyer = { name: buyerName, cpf: buyerCpf };
+        updateData.seller = { name: sellerName, cpf: sellerCpf };
+      } else {
+        updateData.owner = { name: ownerName, cpf: ownerCpf };
+        updateData.tenant = { name: tenantName, cpf: tenantCpf };
+      }
+
+      await updateDoc(doc(db, 'inspections', currentInspection.id), updateData);
+      
+      // Update local state
+      setCurrentInspection({
+        ...currentInspection,
+        ...updateData
+      });
+
+      setIsEditingProperty(false);
+      showToast('Dados atualizados com sucesso!', 'success');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `inspections/${id}`);
+      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
     }
   };
 
@@ -513,7 +773,7 @@ export default function App() {
       });
     } catch (error) {
       console.error('Error generating report:', error);
-      alert('Erro ao gerar o laudo em PDF. Tente novamente.');
+      showToast('Erro ao gerar o laudo em PDF. Tente novamente.', 'error');
     }
   };
 
@@ -545,7 +805,7 @@ export default function App() {
 
     const room = rooms.find(r => r.id === roomId);
     if (room && (room.photos?.length || 0) >= 10) {
-      alert('Limite de 10 fotos por ambiente atingido para evitar erros de armazenamento.');
+      showToast('Limite de 10 fotos por ambiente atingido.', 'error');
       return;
     }
 
@@ -635,7 +895,7 @@ export default function App() {
 
     const item = items.find(i => i.id === itemId);
     if (item && (item.photos?.length || 0) >= 10) {
-      alert('Limite de 10 fotos por item atingido para evitar erros de armazenamento.');
+      showToast('Limite de 10 fotos por item atingido.', 'error');
       return;
     }
 
@@ -658,6 +918,10 @@ export default function App() {
     await updateItem(itemId, { photos: newPhotos });
   };
 
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />;
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50">
@@ -675,9 +939,9 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-bottom border-zinc-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-200">
+          <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-200 bg-white">
             <img 
-              src="/logo.png" 
+              src={LOGO_URL} 
               alt="Uchi Vistorias Logo" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -690,6 +954,13 @@ export default function App() {
             <p className="text-xs font-medium text-brand-blue">{user.displayName}</p>
             <p className="text-[10px] text-zinc-500">{user.email}</p>
           </div>
+          <button 
+            onClick={handleLogout}
+            className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
+            title="Sair"
+          >
+            <LogOut size={20} />
+          </button>
         </div>
       </header>
 
@@ -725,20 +996,20 @@ export default function App() {
                 <div className="grid gap-4">
                   {inspections.map((ins) => (
                     <Card key={ins.id} className="hover:border-zinc-300 transition-colors cursor-pointer group relative" >
-                      <div className="p-5 flex items-center justify-between" onClick={() => {
+                      <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4" onClick={() => {
                         setCurrentInspection(ins);
                         setView('edit');
                       }}>
-                        <div className="flex gap-4 items-start">
-                          <div className="w-12 h-12 bg-zinc-100 rounded-xl flex items-center justify-center group-hover:bg-brand-blue group-hover:text-white transition-colors">
+                        <div className="flex gap-4 items-start flex-1">
+                          <div className="w-12 h-12 bg-zinc-100 rounded-xl flex-shrink-0 flex items-center justify-center group-hover:bg-brand-blue group-hover:text-white transition-colors">
                             <MapPin size={24} />
                           </div>
-                          <div>
-                            <h3 className="font-bold text-lg">
+                          <div className="min-w-0">
+                            <h3 className="font-bold text-lg truncate">
                               {ins.property?.address || ins.address}
                               {ins.property?.complement && ` - ${ins.property.complement}`}
                             </h3>
-                            <div className="flex items-center gap-3 mt-1">
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
                               <Badge variant={ins.type === 'entrada' ? 'info' : ins.type === 'saida' ? 'danger' : 'warning'}>
                                 {ins.type}
                               </Badge>
@@ -753,31 +1024,33 @@ export default function App() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {ins.status === 'completed' && (
+                        <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 pt-3 sm:pt-0">
+                          <div className="flex items-center gap-2">
+                            {ins.status === 'completed' && (
+                              <Button 
+                                variant="ghost" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  generateReport(ins);
+                                }} 
+                                className="text-brand-blue hover:bg-zinc-100 flex items-center gap-2 px-3 py-2"
+                                title="Gerar PDF"
+                              >
+                                <FileText size={18} />
+                                <span className="text-sm font-medium">Gerar PDF</span>
+                              </Button>
+                            )}
                             <Button 
                               variant="ghost" 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                generateReport(ins);
+                                deleteInspection(ins.id);
                               }} 
-                              className="text-brand-blue hover:bg-zinc-100 flex items-center gap-2 px-3 py-2"
-                              title="Gerar PDF"
+                              className="text-red-400 hover:text-red-500 p-2"
                             >
-                              <FileText size={18} />
-                              <span className="text-sm font-medium">Gerar PDF</span>
+                              <Trash2 size={18} />
                             </Button>
-                          )}
-                          <Button 
-                            variant="ghost" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteInspection(ins.id);
-                            }} 
-                            className="text-red-400 hover:text-red-500 p-2"
-                          >
-                            <Trash2 size={18} />
-                          </Button>
+                          </div>
                           <ChevronRight className="text-zinc-300 group-hover:text-brand-blue transition-colors" />
                         </div>
                       </div>
@@ -822,7 +1095,7 @@ export default function App() {
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-semibold text-zinc-700">CEP</label>
-                        <input name="cep" required placeholder="00000-000" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="cep" required onChange={handleCEPChange} placeholder="00000-000" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                     </div>
                   </div>
@@ -856,7 +1129,7 @@ export default function App() {
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-semibold text-zinc-700">CPF</label>
-                        <input name="inspectorCpf" required placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="inspectorCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                     </div>
                   </div>
@@ -874,7 +1147,7 @@ export default function App() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                            <input name="sellerCpf" required placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                            <input name="sellerCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                           </div>
                         </div>
                         <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
@@ -885,7 +1158,7 @@ export default function App() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                            <input name="buyerCpf" required placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                            <input name="buyerCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                           </div>
                         </div>
                       </div>
@@ -899,7 +1172,7 @@ export default function App() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                            <input name="ownerCpf" required placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                            <input name="ownerCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                           </div>
                         </div>
                         <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
@@ -910,7 +1183,7 @@ export default function App() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                            <input name="tenantCpf" required placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                            <input name="tenantCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                           </div>
                         </div>
                       </div>
@@ -932,34 +1205,56 @@ export default function App() {
               animate={{ opacity: 1 }}
               className="space-y-8"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" onClick={() => {
-                    setView('dashboard');
-                    setCurrentInspection(null);
-                    setSelectedRoom(null);
-                  }} icon={ArrowLeft}>Painel</Button>
-                  {currentInspection.status === 'completed' && (
-                    <Button 
-                      variant="secondary" 
-                      onClick={() => generateReport(currentInspection)} 
-                      icon={FileText}
-                      className="text-xs py-1 px-3"
-                    >
-                      Gerar PDF
-                    </Button>
-                  )}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center justify-between md:justify-start gap-2">
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" onClick={() => {
+                      setView('dashboard');
+                      setCurrentInspection(null);
+                      setSelectedRoom(null);
+                    }} icon={ArrowLeft} className="px-2 md:px-4">Painel</Button>
+                    {currentInspection.status === 'completed' && (
+                      <Button 
+                        variant="secondary" 
+                        onClick={() => generateReport(currentInspection)} 
+                        icon={FileText}
+                        className="text-xs py-1 px-3"
+                      >
+                        Gerar PDF
+                      </Button>
+                    )}
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => deleteInspection(currentInspection.id)} 
+                    className="text-red-400 hover:text-red-500 p-2"
+                    title="Excluir Vistoria"
+                  >
+                    <Trash2 size={18} />
+                  </Button>
                 </div>
-                <div className="text-right">
-                  <h2 className="text-xl font-bold">
+                
+                <div className="text-left md:text-right bg-zinc-50 md:bg-transparent p-4 md:p-0 rounded-2xl border border-zinc-100 md:border-0">
+                  <h2 className="text-lg md:text-xl font-bold text-zinc-900 leading-tight">
                     {currentInspection.property?.address || currentInspection.address}
                     {currentInspection.property?.complement && ` - ${currentInspection.property.complement}`}
                   </h2>
-                  <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold">
-                    {currentInspection.type}
-                    {currentInspection.property?.neighborhood && ` • ${currentInspection.property.neighborhood}`}
-                    {currentInspection.property?.city && ` • ${currentInspection.property.city}`}
-                  </p>
+                  <div className="flex flex-col md:items-end gap-2 mt-1">
+                    <p className="text-[10px] md:text-xs text-zinc-500 uppercase tracking-widest font-bold">
+                      {currentInspection.type}
+                      {currentInspection.property?.neighborhood && ` • ${currentInspection.property.neighborhood}`}
+                      {currentInspection.property?.city && ` • ${currentInspection.property.city}`}
+                    </p>
+                    <button 
+                      onClick={() => setIsEditingProperty(true)} 
+                      className="flex items-center gap-1.5 text-brand-blue hover:text-brand-blue/80 transition-colors text-xs font-bold uppercase tracking-wider"
+                    >
+                      <div className="p-1.5 bg-brand-blue/10 rounded-lg">
+                        <Pencil size={12} />
+                      </div>
+                      <span>Editar Dados do Imóvel</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1298,6 +1593,143 @@ export default function App() {
         </div>
       )}
     </div>
+        <Modal 
+          isOpen={isEditingProperty} 
+          onClose={() => setIsEditingProperty(false)}
+          title="Editar Dados do Imóvel"
+        >
+          {currentInspection && (
+            <form onSubmit={handleUpdateProperty} className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Endereço do Imóvel</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-zinc-700">Endereço Completo</label>
+                    <input name="address" required defaultValue={currentInspection.property?.address || currentInspection.address} placeholder="Rua, número, bairro..." className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-zinc-700">Complemento</label>
+                      <input name="complement" defaultValue={currentInspection.property?.complement} placeholder="Apto, Bloco..." className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-zinc-700">Bairro</label>
+                      <input name="neighborhood" required defaultValue={currentInspection.property?.neighborhood} placeholder="Bairro" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-zinc-700">Cidade</label>
+                      <input name="city" required defaultValue={currentInspection.property?.city} placeholder="Cidade" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-zinc-700">CEP</label>
+                      <input name="cep" required onChange={handleCEPChange} defaultValue={currentInspection.property?.cep} placeholder="00000-000" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Vistoriador</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-zinc-700">Nome</label>
+                    <input name="inspectorName" required defaultValue={currentInspection.inspector?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-zinc-700">CPF</label>
+                    <input name="inspectorCpf" required onChange={handleCPFChange} defaultValue={currentInspection.inspector?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Partes Envolvidas</h3>
+                {currentInspection.type === 'venda' ? (
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
+                      <p className="font-bold text-sm">Vendedor</p>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
+                        <input name="sellerName" required defaultValue={currentInspection.seller?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-zinc-500">CPF</label>
+                        <input name="sellerCpf" required onChange={handleCPFChange} defaultValue={currentInspection.seller?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      </div>
+                    </div>
+                    <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
+                      <p className="font-bold text-sm">Comprador</p>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
+                        <input name="buyerName" required defaultValue={currentInspection.buyer?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-zinc-500">CPF</label>
+                        <input name="buyerCpf" required onChange={handleCPFChange} defaultValue={currentInspection.buyer?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
+                      <p className="font-bold text-sm">Proprietário</p>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
+                        <input name="ownerName" required defaultValue={currentInspection.owner?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-zinc-500">CPF</label>
+                        <input name="ownerCpf" required onChange={handleCPFChange} defaultValue={currentInspection.owner?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      </div>
+                    </div>
+                    <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
+                      <p className="font-bold text-sm">Inquilino</p>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
+                        <input name="tenantName" required defaultValue={currentInspection.tenant?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-zinc-500">CPF</label>
+                        <input name="tenantCpf" required onChange={handleCPFChange} defaultValue={currentInspection.tenant?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-zinc-100">
+                <Button variant="ghost" type="button" onClick={() => setIsEditingProperty(false)}>Cancelar</Button>
+                <Button type="submit" icon={Save}>Salvar Alterações</Button>
+              </div>
+            </form>
+          )}
+        </Modal>
+
+        <AnimatePresence>
+          {toast.isOpen && (
+            <Toast 
+              isOpen={toast.isOpen} 
+              message={toast.message} 
+              type={toast.type} 
+            />
+          )}
+        </AnimatePresence>
+
+        <Modal 
+          isOpen={confirmModal.isOpen} 
+          onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          title={confirmModal.title}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}>Cancelar</Button>
+              <Button variant="danger" onClick={confirmModal.onConfirm}>Excluir</Button>
+            </>
+          }
+        >
+          <p className="text-zinc-600">{confirmModal.message}</p>
+        </Modal>
     </ErrorBoundary>
   );
 }
