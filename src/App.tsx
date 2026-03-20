@@ -393,6 +393,7 @@ export default function App() {
     localStorage.removeItem('uchi_logged_in');
     setIsLoggedIn(false);
   };
+  const [isMoving, setIsMoving] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
@@ -728,26 +729,28 @@ export default function App() {
   };
 
   const moveRoom = async (index: number, direction: 'up' | 'down') => {
-    if (!currentInspection) return;
+    if (isMoving || !currentInspection || !rooms.length) return;
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= rooms.length) return;
 
-    const roomA = rooms[index];
-    const roomB = rooms[newIndex];
+    setIsMoving(true);
+    const newRooms = [...rooms];
+    const [movedRoom] = newRooms.splice(index, 1);
+    newRooms.splice(newIndex, 0, movedRoom);
 
     try {
-      // Swap order values directly for more robust reordering
-      const orderA = roomA.order;
-      const orderB = roomB.order;
-
-      await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms`, roomA.id), {
-        order: orderB
-      });
-      await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms`, roomB.id), {
-        order: orderA
-      });
+      // Update all rooms with their new order to ensure consistency and fix any duplicate/missing orders
+      const promises = newRooms.map((room, idx) => 
+        updateDoc(doc(db, `inspections/${currentInspection.id}/rooms`, room.id), {
+          order: idx
+        })
+      );
+      await Promise.all(promises);
     } catch (error) {
       console.error('Error moving room:', error);
+      showToast('Erro ao organizar cômodos', 'error');
+    } finally {
+      setIsMoving(false);
     }
   };
 
@@ -907,26 +910,28 @@ export default function App() {
   };
 
   const moveItem = async (index: number, direction: 'up' | 'down') => {
-    if (!currentInspection || !selectedRoom) return;
+    if (isMoving || !currentInspection || !selectedRoom || !items.length) return;
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= items.length) return;
 
-    const itemA = items[index];
-    const itemB = items[newIndex];
+    setIsMoving(true);
+    const newItems = [...items];
+    const [movedItem] = newItems.splice(index, 1);
+    newItems.splice(newIndex, 0, movedItem);
 
     try {
-      // Swap order values directly for more robust reordering
-      const orderA = itemA.order;
-      const orderB = itemB.order;
-
-      await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`, itemA.id), {
-        order: orderB
-      });
-      await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`, itemB.id), {
-        order: orderA
-      });
+      // Update all items with their new order to ensure consistency
+      const promises = newItems.map((item, idx) => 
+        updateDoc(doc(db, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`, item.id), {
+          order: idx
+        })
+      );
+      await Promise.all(promises);
     } catch (error) {
       console.error('Error moving item:', error);
+      showToast('Erro ao organizar itens', 'error');
+    } finally {
+      setIsMoving(false);
     }
   };
 
@@ -1413,14 +1418,14 @@ export default function App() {
                               <div className="flex flex-col">
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); moveRoom(index, 'up'); }}
-                                  disabled={index === 0}
+                                  disabled={index === 0 || isMoving}
                                   className={`p-1 rounded disabled:opacity-10 ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
                                 >
                                   <ChevronUp size={16} />
                                 </button>
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); moveRoom(index, 'down'); }}
-                                  disabled={index === rooms.length - 1}
+                                  disabled={index === rooms.length - 1 || isMoving}
                                   className={`p-1 rounded disabled:opacity-10 ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
                                 >
                                   <ChevronDown size={16} />
@@ -1550,14 +1555,14 @@ export default function App() {
                                 <div className="flex flex-col gap-1 mr-2">
                                   <button 
                                     onClick={() => moveItem(index, 'up')}
-                                    disabled={index === 0}
+                                    disabled={index === 0 || isMoving}
                                     className="p-1 rounded hover:bg-zinc-100 disabled:opacity-20 text-zinc-400 hover:text-brand-blue transition-all"
                                   >
                                     <ChevronUp size={16} />
                                   </button>
                                   <button 
                                     onClick={() => moveItem(index, 'down')}
-                                    disabled={index === items.length - 1}
+                                    disabled={index === items.length - 1 || isMoving}
                                     className="p-1 rounded hover:bg-zinc-100 disabled:opacity-20 text-zinc-400 hover:text-brand-blue transition-all"
                                   >
                                     <ChevronDown size={16} />
