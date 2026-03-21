@@ -368,11 +368,15 @@ export default function App() {
     title: string;
     message: string;
     onConfirm: () => void;
+    confirmText?: string;
+    confirmVariant?: 'primary' | 'danger' | 'secondary' | 'ghost';
   }>({
     isOpen: false,
     title: '',
     message: '',
-    onConfirm: () => {}
+    onConfirm: () => {},
+    confirmText: 'Confirmar',
+    confirmVariant: 'primary'
   });
   const [toast, setToast] = useState<{
     isOpen: boolean;
@@ -607,6 +611,8 @@ export default function App() {
       isOpen: true,
       title: 'Excluir Vistoria',
       message: 'Tem certeza que deseja excluir esta vistoria permanentemente?',
+      confirmText: 'Excluir',
+      confirmVariant: 'danger',
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, 'inspections', id));
@@ -1088,20 +1094,18 @@ export default function App() {
                         </div>
                         <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 pt-3 sm:pt-0">
                           <div className="flex items-center gap-2">
-                            {ins.status === 'completed' && (
-                              <Button 
-                                variant="ghost" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  generateReport(ins);
-                                }} 
-                                className="text-brand-blue hover:bg-zinc-100 flex items-center gap-2 px-3 py-2"
-                                title="Gerar PDF"
-                              >
-                                <FileText size={18} />
-                                <span className="text-sm font-medium">Gerar PDF</span>
-                              </Button>
-                            )}
+                            <Button 
+                              variant="ghost" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                generateReport(ins);
+                              }} 
+                              className="text-brand-blue hover:bg-zinc-100 flex items-center gap-2 px-3 py-2"
+                              title="Gerar PDF"
+                            >
+                              <FileText size={18} />
+                              <span className="text-sm font-medium">Gerar PDF</span>
+                            </Button>
                             <Button 
                               variant="ghost" 
                               onClick={(e) => {
@@ -1271,20 +1275,28 @@ export default function App() {
                 <div className="flex items-center justify-between md:justify-start gap-2">
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" onClick={() => {
-                      setView('dashboard');
-                      setCurrentInspection(null);
-                      setSelectedRoom(null);
+                      setConfirmModal({
+                        isOpen: true,
+                        title: 'Sair sem Salvar',
+                        message: 'Deseja voltar ao painel sem salvar as alterações?',
+                        confirmText: 'Sair',
+                        confirmVariant: 'danger',
+                        onConfirm: () => {
+                          setView('dashboard');
+                          setCurrentInspection(null);
+                          setSelectedRoom(null);
+                          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                        }
+                      });
                     }} icon={ArrowLeft} className="px-2 md:px-4">Painel</Button>
-                    {currentInspection.status === 'completed' && (
-                      <Button 
-                        variant="secondary" 
-                        onClick={() => generateReport(currentInspection)} 
-                        icon={FileText}
-                        className="text-xs py-1 px-3"
-                      >
-                        Gerar PDF
-                      </Button>
-                    )}
+                    <Button 
+                      variant="secondary" 
+                      onClick={() => generateReport(currentInspection)} 
+                      icon={FileText}
+                      className="text-xs py-1 px-3"
+                    >
+                      Gerar PDF
+                    </Button>
                   </div>
                   <Button 
                     variant="ghost" 
@@ -1718,17 +1730,27 @@ export default function App() {
           <Button 
             className="w-full max-w-md py-4 shadow-xl shadow-black/10" 
             icon={Save}
-            onClick={async () => {
-              try {
-                await updateDoc(doc(db, 'inspections', currentInspection.id), { status: 'completed' });
-                setView('dashboard');
-                setCurrentInspection(null);
-              } catch (error) {
-                handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
-              }
+            onClick={() => {
+              setConfirmModal({
+                isOpen: true,
+                title: 'Salvar Vistoria',
+                message: 'Deseja salvar os dados inseridos nesta vistoria?',
+                confirmText: 'Salvar',
+                confirmVariant: 'primary',
+                onConfirm: async () => {
+                  try {
+                    await updateDoc(doc(db, 'inspections', currentInspection.id), { status: 'completed' });
+                    setView('dashboard');
+                    setCurrentInspection(null);
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                  } catch (error) {
+                    handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
+                  }
+                }
+              });
             }}
           >
-            Finalizar Vistoria
+            Salvar Vistoria
           </Button>
         </div>
       )}
@@ -1864,7 +1886,9 @@ export default function App() {
           footer={
             <>
               <Button variant="ghost" onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}>Cancelar</Button>
-              <Button variant="danger" onClick={confirmModal.onConfirm}>Excluir</Button>
+              <Button variant={confirmModal.confirmVariant || 'primary'} onClick={confirmModal.onConfirm}>
+                {confirmModal.confirmText || 'Confirmar'}
+              </Button>
             </>
           }
         >
