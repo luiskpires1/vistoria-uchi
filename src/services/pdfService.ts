@@ -168,7 +168,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.text('Bom: Sem grandes sinais de desgastes ou com pequenas irregularidades.', 25, currentY + 5);
   doc.text('Regular: Com avarias.', 25, currentY + 10);
   doc.text('Ruim: Com danos graves/relevantes.', 25, currentY + 15);
-  currentY += 15; // Set currentY to the last line of this section
+  currentY += 30; // Set currentY to 15pt below the last line of this section
 
   // Property Description Section
   if (data.propertyDescription) {
@@ -187,7 +187,16 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
   // Rooms and Items
   for (const room of data.rooms) {
-    if (currentY > 240) { doc.addPage(); currentY = 25; }
+    // Smart page break: Calculate minimum height needed for room header + first content
+    let minRoomHeight = 30; // Line + Title + Padding
+    if (room.description) minRoomHeight += 15;
+    if (room.photos && room.photos.length > 0) minRoomHeight += 60; // Title + at least one photo row
+    else if (room.items && room.items.length > 0) minRoomHeight += 40; // Table header + at least one row
+
+    if (currentY + minRoomHeight > 280) { 
+      doc.addPage(); 
+      currentY = 25; 
+    }
 
     doc.setDrawColor(0, 58, 90);
     doc.setLineWidth(0.5);
@@ -213,12 +222,13 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
     // Room Photos
     if (room.photos && room.photos.length > 0) {
-      if (currentY > 200) {
+      // Only break if we are really at the bottom, otherwise the smart break at the start handled it
+      if (currentY > 240) {
         doc.addPage();
         currentY = 20;
       }
       
-      doc.setFontSize(11); // Standardized photo section title
+      doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
       doc.text(`Fotos do Ambiente - ${room.name}`, 20, currentY);
       currentY += 10;
@@ -259,8 +269,8 @@ export const generateInspectionPDF = async (data: InspectionData) => {
       currentY += 5;
     }
 
-    // Skip items table and item photos for "Chaves" room
-    if (room.name.toLowerCase() !== 'chaves') {
+    // Skip items table and item photos for "Chaves" room OR if room has no items
+    if (room.name.toLowerCase() !== 'chaves' && room.items && room.items.length > 0) {
       const tableData = room.items.map(item => [
         item.name,
         item.condition.toUpperCase(),
@@ -286,12 +296,13 @@ export const generateInspectionPDF = async (data: InspectionData) => {
       // Photos for each item in this room
       for (const item of room.items) {
         if (item.photos && item.photos.length > 0) {
-          if (currentY > 200) {
+          // Smart break for item: Title + at least one photo row
+          if (currentY > 220) {
             doc.addPage();
             currentY = 20;
           }
           
-          doc.setFontSize(11); // Standardized item photo title
+          doc.setFontSize(11);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(0, 58, 90);
           const itemTitle = `Fotos - ${room.name} - ${item.name}${item.hasFurniture ? ' - Com Avaria' : ''}`;

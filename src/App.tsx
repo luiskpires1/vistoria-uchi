@@ -398,6 +398,8 @@ export default function App() {
   const [newItemName, setNewItemName] = useState('');
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
   const [editingRoomName, setEditingRoomName] = useState('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemName, setEditingItemName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isAddingRoomLoading, setIsAddingRoomLoading] = useState(false);
   const [isAddingItemLoading, setIsAddingItemLoading] = useState(false);
@@ -1537,8 +1539,54 @@ export default function App() {
                         {items.map((item, index) => (
                           <Card key={item.id} className="p-6 space-y-4">
                             <div className="flex items-start justify-between">
-                              <div className="space-y-1">
-                                <h4 className="font-bold text-lg">{item.name}</h4>
+                              <div className="space-y-1 flex-1">
+                                {editingItemId === item.id ? (
+                                  <div className="flex gap-2 items-center mb-2">
+                                    <input 
+                                      autoFocus
+                                      value={editingItemName}
+                                      onChange={(e) => setEditingItemName(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          updateItem(item.id, { name: editingItemName });
+                                          setEditingItemId(null);
+                                        }
+                                        if (e.key === 'Escape') {
+                                          setEditingItemId(null);
+                                        }
+                                      }}
+                                      className="flex-1 px-3 py-1 text-lg font-bold border border-brand-blue rounded-lg outline-none"
+                                    />
+                                    <button 
+                                      onClick={() => {
+                                        updateItem(item.id, { name: editingItemName });
+                                        setEditingItemId(null);
+                                      }}
+                                      className="p-2 bg-brand-blue text-white rounded-lg"
+                                    >
+                                      <Save size={16} />
+                                    </button>
+                                    <button 
+                                      onClick={() => setEditingItemId(null)}
+                                      className="p-2 bg-zinc-100 text-zinc-500 rounded-lg"
+                                    >
+                                      <X size={16} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 group/title">
+                                    <h4 className="font-bold text-lg">{item.name}</h4>
+                                    <button 
+                                      onClick={() => {
+                                        setEditingItemId(item.id);
+                                        setEditingItemName(item.name);
+                                      }}
+                                      className="p-1 text-zinc-400 hover:text-brand-blue transition-all"
+                                    >
+                                      <Pencil size={14} />
+                                    </button>
+                                  </div>
+                                )}
                                 <div className="flex gap-2">
                                   {(['novo', 'bom', 'regular', 'ruim'] as ItemCondition[]).map((cond) => (
                                     <button
