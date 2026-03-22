@@ -412,7 +412,12 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   const closureText = "As partes acima identificadas declaram estar de acordo com o estado de conservação do imóvel descrito neste laudo de vistoria, ratificando todas as informações e fotos aqui constantes.";
   const splitClosure = doc.splitTextToSize(closureText, pageWidth - 50);
   doc.text(splitClosure, 25, currentY);
-  currentY += (splitClosure.length * 5) + 25;
+  currentY += (splitClosure.length * 5) + 10;
+
+  const contestText = "As partes possuem 5 dias úteis contando a partir do dia de emissão do laudo para contestar os itens desta vistoria.";
+  const splitContest = doc.splitTextToSize(contestText, pageWidth - 50);
+  doc.text(splitContest, 25, currentY);
+  currentY += (splitContest.length * 5) + 25;
 
   const sigWidth = 65;
   const sigSpacing = 20;

@@ -357,6 +357,14 @@ export default function App() {
   const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [isEditingProperty, setIsEditingProperty] = useState(false);
+  const [localInspection, setLocalInspection] = useState<Inspection | null>(null);
+  const [localRooms, setLocalRooms] = useState<Room[]>([]);
+  const [localItems, setLocalItems] = useState<{ [roomId: string]: Item[] }>({});
+  const [deletedRoomIds, setDeletedRoomIds] = useState<string[]>([]);
+  const [deletedItemIds, setDeletedItemIds] = useState<{ [roomId: string]: string[] }>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
   const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.target.value = formatCPF(e.target.value);
   };
@@ -409,7 +417,13 @@ export default function App() {
   const [isAddingItemLoading, setIsAddingItemLoading] = useState(false);
   const [newInspectionType, setNewInspectionType] = useState<InspectionType>('entrada');
 
-  const currentRoom = rooms.find(r => r.id === selectedRoom?.id) || selectedRoom;
+  const currentRoom = view === 'edit'
+    ? localRooms.find(r => r.id === selectedRoom?.id) || selectedRoom
+    : rooms.find(r => r.id === selectedRoom?.id) || selectedRoom;
+
+  const currentItems = view === 'edit'
+    ? (selectedRoom ? localItems[selectedRoom.id] || [] : [])
+    : items;
 
   const compressImage = (base64Str: string, maxWidth = 600, maxHeight = 600, quality = 0.6): Promise<string> => {
     return new Promise((resolve) => {
@@ -606,6 +620,71 @@ export default function App() {
     }
   };
 
+  const saveInspection = async () => {
+    if (!localInspection) return;
+    setIsSaving(true);
+    try {
+      const id = localInspection.id;
+      
+      // 1. Update main inspection doc
+      const inspectionUpdate = { ...localInspection };
+      delete (inspectionUpdate as any).id;
+      await updateDoc(doc(db, 'inspections', id), inspectionUpdate);
+
+      // 2. Handle deleted rooms
+      for (const roomId of deletedRoomIds) {
+        await deleteDoc(doc(db, `inspections/${id}/rooms`, roomId));
+      }
+
+      // 3. Handle rooms (add/update)
+      for (const room of localRooms) {
+        let roomId = room.id;
+        const roomData = { ...room };
+        delete (roomData as any).id;
+        
+        let finalRoomId = roomId;
+        if (roomId.startsWith('temp-')) {
+          const roomRef = await addDoc(collection(db, `inspections/${id}/rooms`), roomData);
+          finalRoomId = roomRef.id;
+        } else {
+          await updateDoc(doc(db, `inspections/${id}/rooms`, roomId), roomData);
+        }
+
+        // 4. Handle deleted items for this room
+        const deletedItems = deletedItemIds[roomId] || [];
+        for (const itemId of deletedItems) {
+          await deleteDoc(doc(db, `inspections/${id}/rooms/${finalRoomId}/items`, itemId));
+        }
+
+        // 5. Handle items (add/update)
+        const items = localItems[roomId] || [];
+        for (const item of items) {
+          const itemData = { ...item };
+          const itemId = itemData.id;
+          delete (itemData as any).id;
+          itemData.roomId = finalRoomId;
+
+          if (itemId.startsWith('temp-')) {
+            await addDoc(collection(db, `inspections/${id}/rooms/${finalRoomId}/items`), itemData);
+          } else {
+            await updateDoc(doc(db, `inspections/${id}/rooms/${finalRoomId}/items`, itemId), itemData);
+          }
+        }
+      }
+
+      setHasUnsavedChanges(false);
+      showToast('Vistoria salva com sucesso!', 'success');
+      setView('dashboard');
+      setCurrentInspection(null);
+      setSelectedRoom(null);
+    } catch (error) {
+      console.error('Error saving inspection:', error);
+      showToast('Erro ao salvar vistoria', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const deleteInspection = (id: string) => {
     setConfirmModal({
       isOpen: true,
@@ -630,9 +709,9 @@ export default function App() {
     });
   };
 
-  const handleUpdateProperty = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleUpdateProperty = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!currentInspection) return;
+    if (!localInspection) return;
 
     const formData = new FormData(e.currentTarget);
     const address = formData.get('address') as string;
@@ -654,112 +733,88 @@ export default function App() {
     const sellerName = formData.get('sellerName') as string;
     const sellerCpf = formData.get('sellerCpf') as string;
 
-    try {
-      const updateData: any = {
-        address, // Legacy
-        property: {
-          address,
-          complement,
-          neighborhood,
-          city,
-          cep
-        },
-        inspector: { name: inspectorName, cpf: inspectorCpf }
-      };
+    const updateData: any = {
+      address, // Legacy
+      property: {
+        address,
+        complement,
+        neighborhood,
+        city,
+        cep
+      },
+      inspector: { name: inspectorName, cpf: inspectorCpf }
+    };
 
-      if (currentInspection.type === 'venda') {
-        updateData.buyer = { name: buyerName, cpf: buyerCpf };
-        updateData.seller = { name: sellerName, cpf: sellerCpf };
-      } else {
-        updateData.owner = { name: ownerName, cpf: ownerCpf };
-        updateData.tenant = { name: tenantName, cpf: tenantCpf };
-      }
-
-      await updateDoc(doc(db, 'inspections', currentInspection.id), updateData);
-      
-      // Update local state
-      setCurrentInspection({
-        ...currentInspection,
-        ...updateData
-      });
-
-      setIsEditingProperty(false);
-      showToast('Dados atualizados com sucesso!', 'success');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
+    if (localInspection.type === 'venda') {
+      updateData.buyer = { name: buyerName, cpf: buyerCpf };
+      updateData.seller = { name: sellerName, cpf: sellerCpf };
+    } else {
+      updateData.owner = { name: ownerName, cpf: ownerCpf };
+      updateData.tenant = { name: tenantName, cpf: tenantCpf };
     }
+
+    setLocalInspection({
+      ...localInspection,
+      ...updateData
+    });
+
+    setIsEditingProperty(false);
+    setHasUnsavedChanges(true);
+    showToast('Dados atualizados localmente. Clique em Salvar para persistir.', 'info');
   };
 
-  const addRoom = async () => {
-    if (!currentInspection || !newRoomName.trim()) return;
+  const addRoom = () => {
+    if (!localInspection || !newRoomName.trim()) return;
 
-    setIsAddingRoomLoading(true);
-    try {
-      const roomRef = await addDoc(collection(db, `inspections/${currentInspection.id}/rooms`), {
-        inspectionId: currentInspection.id,
-        name: newRoomName.trim(),
-        order: rooms.length
-      });
+    const newRoom: Room = {
+      id: `temp-${Date.now()}`,
+      inspectionId: localInspection.id,
+      name: newRoomName.trim(),
+      order: localRooms.length
+    };
 
-      const defaultItems = ['Parede', 'Rodapé', 'Piso', 'Pintura', 'Portas', 'Janelas', 'Teto', 'Mobiliário'].sort((a, b) => a.localeCompare(b));
-      
-      for (let i = 0; i < defaultItems.length; i++) {
-        await addDoc(collection(db, `inspections/${currentInspection.id}/rooms/${roomRef.id}/items`), {
-          roomId: roomRef.id,
-          name: defaultItems[i],
-          condition: 'bom',
-          description: '',
-          hasFurniture: false,
-          photos: [],
-          order: i
-        });
-      }
+    setLocalRooms([...localRooms, newRoom]);
+    
+    const defaultItems = ['Parede', 'Rodapé', 'Piso', 'Pintura', 'Portas', 'Janelas', 'Teto', 'Mobiliário'].sort((a, b) => a.localeCompare(b));
+    const newItems: Item[] = defaultItems.map((name, i) => ({
+      id: `temp-${Date.now()}-${i}`,
+      roomId: newRoom.id,
+      name,
+      condition: 'bom',
+      description: '',
+      hasFurniture: false,
+      photos: [],
+      order: i
+    }));
 
-      setNewRoomName('');
-      setIsAddingRoom(false);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `inspections/${currentInspection.id}/rooms`);
-    } finally {
-      setIsAddingRoomLoading(false);
-    }
+    setLocalItems(prev => ({ ...prev, [newRoom.id]: newItems }));
+    setNewRoomName('');
+    setIsAddingRoom(false);
+    setHasUnsavedChanges(true);
   };
 
-  const deleteRoom = async (roomId: string) => {
-    if (!currentInspection) return;
-    try {
-      await deleteDoc(doc(db, `inspections/${currentInspection.id}/rooms`, roomId));
-      if (selectedRoom?.id === roomId) {
-        setSelectedRoom(null);
-      }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `inspections/${currentInspection.id}/rooms/${roomId}`);
+  const deleteRoom = (roomId: string) => {
+    if (!localInspection) return;
+    setLocalRooms(localRooms.filter(r => r.id !== roomId));
+    if (!roomId.startsWith('temp-')) {
+      setDeletedRoomIds(prev => [...prev, roomId]);
     }
+    if (selectedRoom?.id === roomId) {
+      setSelectedRoom(null);
+    }
+    setHasUnsavedChanges(true);
   };
 
-  const moveRoom = async (index: number, direction: 'up' | 'down') => {
-    if (isMoving || !currentInspection || !rooms.length) return;
+  const moveRoom = (index: number, direction: 'up' | 'down') => {
     const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= rooms.length) return;
+    if (newIndex < 0 || newIndex >= localRooms.length) return;
 
-    setIsMoving(true);
-    const newRooms = [...rooms];
+    const newRooms = [...localRooms];
     const [movedRoom] = newRooms.splice(index, 1);
     newRooms.splice(newIndex, 0, movedRoom);
-
-    try {
-      // Update all rooms with their new order to ensure consistency and fix any duplicate/missing orders
-      const promises = newRooms.map((room, idx) => 
-        updateDoc(doc(db, `inspections/${currentInspection.id}/rooms`, room.id), {
-          order: idx
-        })
-      );
-      await Promise.all(promises);
-    } catch (error) {
-      console.error('Error moving room:', error);
-      showToast('Erro ao organizar cômodos', 'error');
-    } finally {
-      setIsMoving(false);
-    }
+    
+    setLocalRooms(newRooms.map((r, i) => ({ ...r, order: i })));
+    setHasUnsavedChanges(true);
   };
 
   const generateReport = async (inspection: Inspection) => {
@@ -812,55 +867,36 @@ export default function App() {
     }
   };
 
-  const updateRoom = async (roomId: string) => {
-    if (!currentInspection || !editingRoomName.trim()) return;
-    try {
-      await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms`, roomId), {
-        name: editingRoomName.trim()
-      });
-      setEditingRoomId(null);
-      setEditingRoomName('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}/rooms/${roomId}`);
-    }
+  const updateRoom = (roomId: string) => {
+    if (!localInspection || !editingRoomName.trim()) return;
+    setLocalRooms(localRooms.map(r => r.id === roomId ? { ...r, name: editingRoomName.trim() } : r));
+    setEditingRoomId(null);
+    setEditingRoomName('');
+    setHasUnsavedChanges(true);
   };
 
-  const updatePropertyDescription = async (description: string) => {
-    if (!currentInspection) return;
-    try {
-      await updateDoc(doc(db, 'inspections', currentInspection.id), {
-        propertyDescription: description
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
-    }
+  const updatePropertyDescription = (description: string) => {
+    if (!localInspection) return;
+    setLocalInspection({ ...localInspection, propertyDescription: description });
+    setHasUnsavedChanges(true);
   };
 
-  const updateInspectorOpinion = async (opinion: string) => {
-    if (!currentInspection) return;
-    try {
-      await updateDoc(doc(db, 'inspections', currentInspection.id), {
-        inspectorOpinion: opinion
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
-    }
+  const updateInspectorOpinion = (opinion: string) => {
+    if (!localInspection) return;
+    setLocalInspection({ ...localInspection, inspectorOpinion: opinion });
+    setHasUnsavedChanges(true);
   };
 
-  const updateRoomDetails = async (roomId: string, updates: Partial<Room>) => {
-    if (!currentInspection) return;
-    try {
-      await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms`, roomId), updates);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}/rooms/${roomId}`);
-    }
+  const updateRoomDetails = (roomId: string, updates: Partial<Room>) => {
+    setLocalRooms(localRooms.map(r => r.id === roomId ? { ...r, ...updates } : r));
+    setHasUnsavedChanges(true);
   };
 
   const handleRoomPhotoUpload = async (roomId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const room = rooms.find(r => r.id === roomId);
+    const room = localRooms.find(r => r.id === roomId);
     if (room && (room.photos?.length || 0) >= 10) {
       showToast('Limite de 10 fotos por ambiente atingido.', 'error');
       return;
@@ -870,93 +906,87 @@ export default function App() {
     reader.onloadend = async () => {
       const base64String = reader.result as string;
       const compressedBase64 = await compressImage(base64String);
-      if (room) {
-        await updateRoomDetails(roomId, { photos: [...(room.photos || []), compressedBase64] });
-      }
+      updateRoomDetails(roomId, { photos: [...(room?.photos || []), compressedBase64] });
     };
     reader.readAsDataURL(file);
   };
 
-  const removeRoomPhoto = async (roomId: string, photoIndex: number) => {
-    const room = rooms.find(r => r.id === roomId);
+  const removeRoomPhoto = (roomId: string, photoIndex: number) => {
+    const room = localRooms.find(r => r.id === roomId);
     if (!room || !room.photos) return;
     const newPhotos = [...room.photos];
     newPhotos.splice(photoIndex, 1);
-    await updateRoomDetails(roomId, { photos: newPhotos });
+    updateRoomDetails(roomId, { photos: newPhotos });
   };
 
-  const addItem = async () => {
-    if (!currentInspection || !selectedRoom || !newItemName.trim()) return;
+  const addItem = () => {
+    if (!localInspection || !selectedRoom || !newItemName.trim()) return;
 
-    setIsAddingItemLoading(true);
-    try {
-      await addDoc(collection(db, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`), {
-        roomId: selectedRoom.id,
-        name: newItemName.trim(),
-        condition: 'bom',
-        description: '',
-        hasFurniture: false,
-        photos: [],
-        order: items.length
-      });
-      setNewItemName('');
-      setIsAddingItem(false);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`);
-    } finally {
-      setIsAddingItemLoading(false);
-    }
+    const newItem: Item = {
+      id: `temp-${Date.now()}`,
+      roomId: selectedRoom.id,
+      name: newItemName.trim(),
+      condition: 'bom',
+      description: '',
+      hasFurniture: false,
+      photos: [],
+      order: (localItems[selectedRoom.id] || []).length
+    };
+
+    setLocalItems(prev => ({
+      ...prev,
+      [selectedRoom.id]: [...(prev[selectedRoom.id] || []), newItem]
+    }));
+    setNewItemName('');
+    setIsAddingItem(false);
+    setHasUnsavedChanges(true);
   };
 
-  const updateItem = async (itemId: string, updates: Partial<Item>) => {
-    if (!currentInspection || !selectedRoom) return;
-    try {
-      await updateDoc(doc(db, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`, itemId), updates);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items/${itemId}`);
-    }
+  const updateItem = (itemId: string, updates: Partial<Item>) => {
+    if (!selectedRoom) return;
+    setLocalItems(prev => ({
+      ...prev,
+      [selectedRoom.id]: (prev[selectedRoom.id] || []).map(i => i.id === itemId ? { ...i, ...updates } : i)
+    }));
+    setHasUnsavedChanges(true);
   };
 
-  const moveItem = async (index: number, direction: 'up' | 'down') => {
-    if (isMoving || !currentInspection || !selectedRoom || !items.length) return;
+  const moveItem = (index: number, direction: 'up' | 'down') => {
+    if (!selectedRoom || !localItems[selectedRoom.id]) return;
     const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= items.length) return;
+    if (newIndex < 0 || newIndex >= localItems[selectedRoom.id].length) return;
 
-    setIsMoving(true);
-    const newItems = [...items];
+    const newItems = [...localItems[selectedRoom.id]];
     const [movedItem] = newItems.splice(index, 1);
     newItems.splice(newIndex, 0, movedItem);
-
-    try {
-      // Update all items with their new order to ensure consistency
-      const promises = newItems.map((item, idx) => 
-        updateDoc(doc(db, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`, item.id), {
-          order: idx
-        })
-      );
-      await Promise.all(promises);
-    } catch (error) {
-      console.error('Error moving item:', error);
-      showToast('Erro ao organizar itens', 'error');
-    } finally {
-      setIsMoving(false);
-    }
+    
+    setLocalItems(prev => ({
+      ...prev,
+      [selectedRoom.id]: newItems.map((item, idx) => ({ ...item, order: idx }))
+    }));
+    setHasUnsavedChanges(true);
   };
 
-  const deleteItem = async (itemId: string) => {
-    if (!currentInspection || !selectedRoom) return;
-    try {
-      await deleteDoc(doc(db, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items`, itemId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `inspections/${currentInspection.id}/rooms/${selectedRoom.id}/items/${itemId}`);
+  const deleteItem = (itemId: string) => {
+    if (!selectedRoom) return;
+    setLocalItems(prev => ({
+      ...prev,
+      [selectedRoom.id]: (prev[selectedRoom.id] || []).filter(i => i.id !== itemId)
+    }));
+    if (!itemId.startsWith('temp-')) {
+      setDeletedItemIds(prev => ({
+        ...prev,
+        [selectedRoom.id]: [...(prev[selectedRoom.id] || []), itemId]
+      }));
     }
+    setHasUnsavedChanges(true);
   };
 
   const handlePhotoUpload = async (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const item = items.find(i => i.id === itemId);
+    const item = (localItems[selectedRoom?.id || ''] || []).find(i => i.id === itemId);
     if (item && (item.photos?.length || 0) >= 10) {
       showToast('Limite de 10 fotos por item atingido.', 'error');
       return;
@@ -967,18 +997,18 @@ export default function App() {
       const base64String = reader.result as string;
       const compressedBase64 = await compressImage(base64String);
       if (item) {
-        await updateItem(itemId, { photos: [...item.photos, compressedBase64] });
+        updateItem(itemId, { photos: [...item.photos, compressedBase64] });
       }
     };
     reader.readAsDataURL(file);
   };
 
-  const removePhoto = async (itemId: string, photoIndex: number) => {
-    const item = items.find(i => i.id === itemId);
+  const removePhoto = (itemId: string, photoIndex: number) => {
+    const item = (localItems[selectedRoom?.id || ''] || []).find(i => i.id === itemId);
     if (!item) return;
     const newPhotos = [...item.photos];
     newPhotos.splice(photoIndex, 1);
-    await updateItem(itemId, { photos: newPhotos });
+    updateItem(itemId, { photos: newPhotos });
   };
 
   if (!isLoggedIn) {
@@ -1064,9 +1094,37 @@ export default function App() {
                 <div className="grid gap-4">
                   {inspections.map((ins) => (
                     <Card key={ins.id} className="hover:border-zinc-300 transition-colors cursor-pointer group relative" >
-                      <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4" onClick={() => {
-                        setCurrentInspection(ins);
-                        setView('edit');
+                      <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4" onClick={async () => {
+                        setLoading(true);
+                        try {
+                          // Fetch all rooms
+                          const roomsQuery = query(collection(db, `inspections/${ins.id}/rooms`), orderBy('order'));
+                          const roomsSnapshot = await getDocs(roomsQuery);
+                          const roomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+                          
+                          // Fetch all items for all rooms
+                          const itemsMap: { [roomId: string]: Item[] } = {};
+                          for (const room of roomsData) {
+                            const itemsQuery = query(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`), orderBy('order'));
+                            const itemsSnapshot = await getDocs(itemsQuery);
+                            itemsMap[room.id] = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+                          }
+                          
+                          setLocalInspection({ ...ins });
+                          setLocalRooms(roomsData);
+                          setLocalItems(itemsMap);
+                          setDeletedRoomIds([]);
+                          setDeletedItemIds({});
+                          setHasUnsavedChanges(false);
+                          
+                          setCurrentInspection(ins);
+                          setView('edit');
+                        } catch (error) {
+                          console.error('Error loading inspection:', error);
+                          showToast('Erro ao carregar dados da vistoria', 'error');
+                        } finally {
+                          setLoading(false);
+                        }
                       }}>
                         <div className="flex gap-4 items-start flex-1">
                           <div className="w-12 h-12 bg-zinc-100 rounded-xl flex-shrink-0 flex items-center justify-center group-hover:bg-brand-blue group-hover:text-white transition-colors">
@@ -1264,7 +1322,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {view === 'edit' && currentInspection && (
+          {view === 'edit' && localInspection && (
             <motion.div 
               key="edit"
               initial={{ opacity: 0 }}
@@ -1275,23 +1333,34 @@ export default function App() {
                 <div className="flex items-center justify-between md:justify-start gap-2">
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" onClick={() => {
-                      setConfirmModal({
-                        isOpen: true,
-                        title: 'Sair sem Salvar',
-                        message: 'Deseja voltar ao painel sem salvar as alterações?',
-                        confirmText: 'Sair',
-                        confirmVariant: 'danger',
-                        onConfirm: () => {
-                          setView('dashboard');
-                          setCurrentInspection(null);
-                          setSelectedRoom(null);
-                          setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                        }
-                      });
+                      if (hasUnsavedChanges) {
+                        setConfirmModal({
+                          isOpen: true,
+                          title: 'Sair sem Salvar',
+                          message: 'Existem alterações não salvas. Deseja realmente sair sem salvar?',
+                          confirmText: 'Sair sem Salvar',
+                          confirmVariant: 'danger',
+                          onConfirm: () => {
+                            setView('dashboard');
+                            setLocalInspection(null);
+                            setLocalRooms([]);
+                            setLocalItems({});
+                            setSelectedRoom(null);
+                            setHasUnsavedChanges(false);
+                            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                          }
+                        });
+                      } else {
+                        setView('dashboard');
+                        setLocalInspection(null);
+                        setLocalRooms([]);
+                        setLocalItems({});
+                        setSelectedRoom(null);
+                      }
                     }} icon={ArrowLeft} className="px-2 md:px-4">Painel</Button>
                     <Button 
                       variant="secondary" 
-                      onClick={() => generateReport(currentInspection)} 
+                      onClick={() => generateReport(localInspection)} 
                       icon={FileText}
                       className="text-xs py-1 px-3"
                     >
@@ -1300,7 +1369,7 @@ export default function App() {
                   </div>
                   <Button 
                     variant="ghost" 
-                    onClick={() => deleteInspection(currentInspection.id)} 
+                    onClick={() => deleteInspection(localInspection.id)} 
                     className="text-red-400 hover:text-red-500 p-2"
                     title="Excluir Vistoria"
                   >
@@ -1310,14 +1379,14 @@ export default function App() {
                 
                 <div className="text-left md:text-right bg-zinc-50 md:bg-transparent p-4 md:p-0 rounded-2xl border border-zinc-100 md:border-0">
                   <h2 className="text-lg md:text-xl font-bold text-zinc-900 leading-tight">
-                    {currentInspection.property?.address || currentInspection.address}
-                    {currentInspection.property?.complement && ` - ${currentInspection.property.complement}`}
+                    {localInspection.property?.address || localInspection.address}
+                    {localInspection.property?.complement && ` - ${localInspection.property.complement}`}
                   </h2>
                   <div className="flex flex-col md:items-end gap-2 mt-1">
                     <p className="text-[10px] md:text-xs text-zinc-500 uppercase tracking-widest font-bold">
-                      {currentInspection.type}
-                      {currentInspection.property?.neighborhood && ` • ${currentInspection.property.neighborhood}`}
-                      {currentInspection.property?.city && ` • ${currentInspection.property.city}`}
+                      {localInspection.type}
+                      {localInspection.property?.neighborhood && ` • ${localInspection.property.neighborhood}`}
+                      {localInspection.property?.city && ` • ${localInspection.property.city}`}
                     </p>
                     <button 
                       onClick={() => setIsEditingProperty(true)} 
@@ -1339,12 +1408,12 @@ export default function App() {
                 </div>
                 <textarea
                   placeholder="Descreva as características gerais do imóvel (ex: pintura, conservação, observações importantes)..."
-                  value={currentInspection.propertyDescription || ''}
+                  value={localInspection.propertyDescription || ''}
                   onChange={(e) => {
                     const newValue = e.target.value;
-                    setCurrentInspection(prev => prev ? { ...prev, propertyDescription: newValue } : null);
+                    setLocalInspection(prev => prev ? { ...prev, propertyDescription: newValue } : null);
+                    setHasUnsavedChanges(true);
                   }}
-                  onBlur={(e) => updatePropertyDescription(e.target.value)}
                   className="w-full p-4 rounded-2xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[120px] bg-zinc-50/50"
                 />
 
@@ -1354,12 +1423,12 @@ export default function App() {
                 </div>
                 <textarea
                   placeholder="Descreva o parecer final da vistoria (ex: o imóvel encontra-se em perfeitas condições para entrega)..."
-                  value={currentInspection.inspectorOpinion || ''}
+                  value={localInspection.inspectorOpinion || ''}
                   onChange={(e) => {
                     const newValue = e.target.value;
-                    setCurrentInspection(prev => prev ? { ...prev, inspectorOpinion: newValue } : null);
+                    setLocalInspection(prev => prev ? { ...prev, inspectorOpinion: newValue } : null);
+                    setHasUnsavedChanges(true);
                   }}
-                  onBlur={(e) => updateInspectorOpinion(e.target.value)}
                   className="w-full p-4 rounded-2xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[120px] bg-zinc-50/50"
                 />
               </div>
@@ -1390,7 +1459,7 @@ export default function App() {
                         </div>
                       </div>
                     )}
-                    {rooms.map((room, index) => (
+                    {localRooms.map((room, index) => (
                       <div key={room.id} className="group relative">
                         {editingRoomId === room.id ? (
                           <div className="p-2 bg-white rounded-xl border-brand-blue border shadow-sm space-y-2">
@@ -1439,7 +1508,7 @@ export default function App() {
                                 </button>
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); moveRoom(index, 'down'); }}
-                                  disabled={index === rooms.length - 1 || isMoving}
+                                  disabled={index === localRooms.length - 1 || isMoving}
                                   className={`p-1 rounded disabled:opacity-10 ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
                                 >
                                   <ChevronDown size={16} />
@@ -1548,7 +1617,7 @@ export default function App() {
                       )}
 
                       <div className="space-y-4">
-                        {items.map((item, index) => (
+                        {currentItems.map((item, index) => (
                           <Card key={item.id} className="p-6 space-y-4">
                             <div className="flex items-start justify-between">
                               <div className="space-y-1 flex-1">
@@ -1622,7 +1691,7 @@ export default function App() {
                                   </button>
                                   <button 
                                     onClick={() => moveItem(index, 'down')}
-                                    disabled={index === items.length - 1 || isMoving}
+                                    disabled={index === currentItems.length - 1 || isMoving}
                                     className="p-1 rounded hover:bg-zinc-100 disabled:opacity-20 text-zinc-400 hover:text-brand-blue transition-all"
                                   >
                                     <ChevronDown size={16} />
@@ -1709,7 +1778,7 @@ export default function App() {
                           </Card>
                         ))}
 
-                        {items.length === 0 && (
+                        {currentItems.length === 0 && (
                           <div className="text-center py-12 bg-white rounded-3xl border border-zinc-100">
                             <p className="text-zinc-500">Nenhum item registrado neste cômodo.</p>
                           </div>
@@ -1725,11 +1794,12 @@ export default function App() {
       </main>
 
       {/* Footer / Mobile Nav */}
-      {view === 'edit' && currentInspection && (
+      {view === 'edit' && localInspection && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-zinc-200 flex justify-center z-[100]">
           <Button 
             className="w-full max-w-md py-4 shadow-xl shadow-black/10" 
             icon={Save}
+            disabled={isSaving}
             onClick={() => {
               setConfirmModal({
                 isOpen: true,
@@ -1737,20 +1807,14 @@ export default function App() {
                 message: 'Deseja salvar os dados inseridos nesta vistoria?',
                 confirmText: 'Salvar',
                 confirmVariant: 'primary',
-                onConfirm: async () => {
-                  try {
-                    await updateDoc(doc(db, 'inspections', currentInspection.id), { status: 'completed' });
-                    setView('dashboard');
-                    setCurrentInspection(null);
-                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                  } catch (error) {
-                    handleFirestoreError(error, OperationType.UPDATE, `inspections/${currentInspection.id}`);
-                  }
+                onConfirm: () => {
+                  saveInspection();
+                  setConfirmModal(prev => ({ ...prev, isOpen: false }));
                 }
               });
             }}
           >
-            Salvar Vistoria
+            {isSaving ? 'Salvando...' : 'Salvar Vistoria'}
           </Button>
         </div>
       )}
@@ -1760,33 +1824,33 @@ export default function App() {
           onClose={() => setIsEditingProperty(false)}
           title="Editar Dados do Imóvel"
         >
-          {currentInspection && (
+          {localInspection && (
             <form onSubmit={handleUpdateProperty} className="space-y-6">
               <div className="space-y-4">
                 <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Endereço do Imóvel</h3>
                 <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-zinc-700">Endereço Completo</label>
-                    <input name="address" required defaultValue={currentInspection.property?.address || currentInspection.address} placeholder="Rua, número, bairro..." className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                    <input name="address" required defaultValue={localInspection.property?.address || localInspection.address} placeholder="Rua, número, bairro..." className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-zinc-700">Complemento</label>
-                      <input name="complement" defaultValue={currentInspection.property?.complement} placeholder="Apto, Bloco..." className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      <input name="complement" defaultValue={localInspection.property?.complement} placeholder="Apto, Bloco..." className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-zinc-700">Bairro</label>
-                      <input name="neighborhood" required defaultValue={currentInspection.property?.neighborhood} placeholder="Bairro" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      <input name="neighborhood" required defaultValue={localInspection.property?.neighborhood} placeholder="Bairro" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-zinc-700">Cidade</label>
-                      <input name="city" required defaultValue={currentInspection.property?.city} placeholder="Cidade" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      <input name="city" required defaultValue={localInspection.property?.city} placeholder="Cidade" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-zinc-700">CEP</label>
-                      <input name="cep" required onChange={handleCEPChange} defaultValue={currentInspection.property?.cep} placeholder="00000-000" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                      <input name="cep" required onChange={handleCEPChange} defaultValue={localInspection.property?.cep} placeholder="00000-000" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                     </div>
                   </div>
                 </div>
@@ -1797,39 +1861,39 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-zinc-700">Nome</label>
-                    <input name="inspectorName" required defaultValue={currentInspection.inspector?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                    <input name="inspectorName" required defaultValue={localInspection.inspector?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-zinc-700">CPF</label>
-                    <input name="inspectorCpf" required onChange={handleCPFChange} defaultValue={currentInspection.inspector?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                    <input name="inspectorCpf" required onChange={handleCPFChange} defaultValue={localInspection.inspector?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                   </div>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Partes Envolvidas</h3>
-                {currentInspection.type === 'venda' ? (
+                {localInspection.type === 'venda' ? (
                   <div className="grid grid-cols-1 gap-6">
                     <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
                       <p className="font-bold text-sm">Vendedor</p>
                       <div className="space-y-2">
                         <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
-                        <input name="sellerName" required defaultValue={currentInspection.seller?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="sellerName" required defaultValue={localInspection.seller?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                        <input name="sellerCpf" required onChange={handleCPFChange} defaultValue={currentInspection.seller?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="sellerCpf" required onChange={handleCPFChange} defaultValue={localInspection.seller?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                     </div>
                     <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
                       <p className="font-bold text-sm">Comprador</p>
                       <div className="space-y-2">
                         <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
-                        <input name="buyerName" required defaultValue={currentInspection.buyer?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="buyerName" required defaultValue={localInspection.buyer?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                        <input name="buyerCpf" required onChange={handleCPFChange} defaultValue={currentInspection.buyer?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="buyerCpf" required onChange={handleCPFChange} defaultValue={localInspection.buyer?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                     </div>
                   </div>
@@ -1839,22 +1903,22 @@ export default function App() {
                       <p className="font-bold text-sm">Proprietário</p>
                       <div className="space-y-2">
                         <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
-                        <input name="ownerName" required defaultValue={currentInspection.owner?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="ownerName" required defaultValue={localInspection.owner?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                        <input name="ownerCpf" required onChange={handleCPFChange} defaultValue={currentInspection.owner?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="ownerCpf" required onChange={handleCPFChange} defaultValue={localInspection.owner?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                     </div>
                     <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
                       <p className="font-bold text-sm">Inquilino</p>
                       <div className="space-y-2">
                         <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
-                        <input name="tenantName" required defaultValue={currentInspection.tenant?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="tenantName" required defaultValue={localInspection.tenant?.name} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                        <input name="tenantCpf" required onChange={handleCPFChange} defaultValue={currentInspection.tenant?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
+                        <input name="tenantCpf" required onChange={handleCPFChange} defaultValue={localInspection.tenant?.cpf} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                       </div>
                     </div>
                   </div>
