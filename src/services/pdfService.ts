@@ -220,7 +220,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
       head: [['Ambiente', 'Item', 'Descrição da Avaria']],
       body: damageTableData,
       theme: 'striped',
-      headStyles: { fillColor: [245, 245, 245], textColor: [0, 58, 90], fontSize: 11, fontStyle: 'bold' },
+      headStyles: { fillColor: [0, 58, 90], textColor: 'white', fontSize: 11 },
       bodyStyles: { fontSize: 11, textColor: [180, 0, 0] }, // Red text for damages
       margin: { left: margin, right: margin },
       didDrawPage: (data: any) => {
