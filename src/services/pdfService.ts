@@ -44,10 +44,29 @@ interface InspectionData {
 export const generateInspectionPDF = async (data: InspectionData) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const contentWidth = pageWidth - (margin * 2);
   
+  // Spacing constants
+  const LINE_HEIGHT = 6;
+  const SECTION_GAP = 15;
+  const HEADER_HEIGHT = 35;
+  const FOOTER_SPACE = 25;
+  const MAX_Y = pageHeight - FOOTER_SPACE;
+
+  // Helper for page breaks
+  const checkPageBreak = (neededHeight: number, currentY: number) => {
+    if (currentY + neededHeight > MAX_Y) {
+      doc.addPage();
+      return margin + 5; // Return new Y
+    }
+    return currentY;
+  };
+
   // Company Header Background
   doc.setFillColor(0, 58, 90);
-  doc.rect(0, 0, pageWidth, 35, 'F');
+  doc.rect(0, 0, pageWidth, HEADER_HEIGHT, 'F');
 
   // Company Header
   const logoUrl = '/logo.png';
@@ -57,12 +76,12 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     console.warn('Could not load logo for PDF, skipping...', e);
   }
 
-  doc.setFontSize(14); // Standardized header title
+  doc.setFontSize(14);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.text('Uchi Imóveis', 45, 13);
 
-  doc.setFontSize(9); // Increased font size for header info
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(255, 255, 255);
   doc.text('CNPJ 63.595.950/0001-26 | CRECI 28561', 45, 19);
@@ -70,150 +89,137 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.text('Endereço: Rua Alcides Gonzaga 240, Boa Vista, Porto Alegre - RS, CEP: 90480-020', 45, 29);
 
   // Title
-  doc.setFontSize(16); // Standardized main title
+  doc.setFontSize(16);
   doc.setTextColor(0, 58, 90);
   doc.setFont('helvetica', 'bold');
   doc.text('LAUDO DE VISTORIA IMOBILIÁRIA', pageWidth / 2, 48, { align: 'center' });
   
-  doc.setFontSize(10); // Increased font size for generation date
+  doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   doc.setFont('helvetica', 'normal');
   doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 55, { align: 'center' });
 
   // Helper for section headers
   const drawSectionHeader = (title: string, y: number) => {
+    const headerHeight = 10;
+    const newY = checkPageBreak(headerHeight + 10, y);
     doc.setFillColor(240, 240, 240);
-    doc.rect(20, y - 8, pageWidth - 40, 10, 'F'); // Increased rect height
-    doc.setFontSize(10);
+    doc.rect(margin, newY - 8, contentWidth, headerHeight, 'F');
+    doc.setFontSize(11);
     doc.setTextColor(0, 58, 90);
     doc.setFont('helvetica', 'bold');
-    doc.text(title, 25, y);
-    return y + 10; // Increased return value for more bottom padding
+    doc.text(title, margin + 5, newY - 1);
+    return newY + 5;
   };
 
   // Property Info
   doc.setDrawColor(230, 230, 230);
-  doc.line(20, 62, pageWidth - 20, 62);
+  doc.line(margin, 62, pageWidth - margin, 62);
   
-  let currentY = 75; // Increased initial Y
-  drawSectionHeader('DADOS DO IMÓVEL', currentY);
-  currentY += 10; // Spacing after header
+  let currentY = 75;
+  currentY = drawSectionHeader('DADOS DO IMÓVEL', currentY);
   
-  doc.setFontSize(11); // Increased font size
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(50, 50, 50);
-  doc.text(`Endereço: ${data.property.address}${data.property.complement ? ', ' + data.property.complement : ''}`, 25, currentY);
-  currentY += 6;
-  doc.text(`Bairro: ${data.property.neighborhood}`, 25, currentY);
-  currentY += 6;
-  doc.text(`Cidade: ${data.property.city} - CEP: ${data.property.cep}`, 25, currentY);
-  currentY += 15; // Standardized spacing between sections
+  doc.text(`Endereço: ${data.property.address}${data.property.complement ? ', ' + data.property.complement : ''}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  doc.text(`Bairro: ${data.property.neighborhood}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  doc.text(`Cidade: ${data.property.city} - CEP: ${data.property.cep}`, margin + 5, currentY);
+  currentY += SECTION_GAP;
 
   // Inspection Info
-  drawSectionHeader('DADOS DA VISTORIA', currentY);
-  currentY += 10; // Spacing after header
-  doc.setFontSize(11); // Increased font size
+  currentY = drawSectionHeader('DADOS DA VISTORIA', currentY);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(50, 50, 50);
-  doc.text(`Tipo: ${data.type.toUpperCase()}`, 25, currentY);
-  currentY += 6;
-  doc.text(`Data: ${new Date(data.date).toLocaleDateString('pt-BR')}`, 25, currentY);
-  currentY += 6;
-  doc.text(`Status: ${data.status === 'completed' ? 'FINALIZADA' : 'EM RASCUNHO'}`, 25, currentY);
-  currentY += 15; // Standardized spacing between sections
+  doc.text(`Tipo: ${data.type.toUpperCase()}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  doc.text(`Data: ${new Date(data.date).toLocaleDateString('pt-BR')}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  doc.text(`Status: ${data.status === 'completed' ? 'FINALIZADA' : 'EM RASCUNHO'}`, margin + 5, currentY);
+  currentY += SECTION_GAP;
 
   // Parties Info
-  if (currentY > 260) { doc.addPage(); currentY = 25; }
-  drawSectionHeader('PARTES ENVOLVIDAS', currentY);
-  currentY += 10; // Spacing after header
-  
-  doc.setFontSize(11); // Increased font size
+  currentY = drawSectionHeader('PARTES ENVOLVIDAS', currentY);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(50, 50, 50);
   
-  doc.text(`Vistoriador: ${data.inspector.name} (CPF: ${data.inspector.cpf})`, 25, currentY);
-  currentY += 6;
+  doc.text(`Vistoriador: ${data.inspector.name} (CPF: ${data.inspector.cpf})`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
 
   if (data.type === 'venda') {
     if (data.seller) {
-      doc.text(`Vendedor: ${data.seller.name} (CPF: ${data.seller.cpf})`, 25, currentY);
-      currentY += 6;
+      doc.text(`Vendedor: ${data.seller.name} (CPF: ${data.seller.cpf})`, margin + 5, currentY);
+      currentY += LINE_HEIGHT;
     }
     if (data.buyer) {
-      doc.text(`Comprador: ${data.buyer.name} (CPF: ${data.buyer.cpf})`, 25, currentY);
-      currentY += 6;
+      doc.text(`Comprador: ${data.buyer.name} (CPF: ${data.buyer.cpf})`, margin + 5, currentY);
+      currentY += LINE_HEIGHT;
     }
   } else {
     if (data.owner) {
-      doc.text(`Proprietário: ${data.owner.name} (CPF: ${data.owner.cpf})`, 25, currentY);
-      currentY += 6;
+      doc.text(`Proprietário: ${data.owner.name} (CPF: ${data.owner.cpf})`, margin + 5, currentY);
+      currentY += LINE_HEIGHT;
     }
     if (data.tenant) {
-      doc.text(`Inquilino: ${data.tenant.name} (CPF: ${data.tenant.cpf})`, 25, currentY);
-      currentY += 6;
+      doc.text(`Inquilino: ${data.tenant.name} (CPF: ${data.tenant.cpf})`, margin + 5, currentY);
+      currentY += LINE_HEIGHT;
     }
   }
+  currentY += SECTION_GAP - LINE_HEIGHT;
 
   // Evaluation Criteria Section
-  currentY += 9; // Adjusted to result in 15pt gap from last line (6+9=15)
-  if (currentY > 240) { doc.addPage(); currentY = 25; }
-  
-  drawSectionHeader('CRITÉRIOS DE AVALIAÇÃO DO ESTADO DE CONSERVAÇÃO', currentY);
-  currentY += 10; // Spacing after header
-  
-  doc.setFontSize(11); // Increased font size
+  currentY = drawSectionHeader('CRITÉRIOS DE AVALIAÇÃO DO ESTADO DE CONSERVAÇÃO', currentY);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(50, 50, 50);
-  doc.text('Novo: Primeiro uso.', 25, currentY);
-  doc.text('Bom: Sem grandes sinais de desgastes ou com pequenas irregularidades.', 25, currentY + 5);
-  doc.text('Regular: Com avarias.', 25, currentY + 10);
-  doc.text('Ruim: Com danos graves/relevantes.', 25, currentY + 15);
-  currentY += 30; // Set currentY to 15pt below the last line of this section
+  doc.text('Novo: Primeiro uso.', margin + 5, currentY);
+  doc.text('Bom: Sem grandes sinais de desgastes ou com pequenas irregularidades.', margin + 5, currentY + 5);
+  doc.text('Regular: Com avarias.', margin + 5, currentY + 10);
+  doc.text('Ruim: Com danos graves/relevantes.', margin + 5, currentY + 15);
+  currentY += 25 + SECTION_GAP;
 
   // Property Description Section
   if (data.propertyDescription) {
-    if (currentY > 240) { doc.addPage(); currentY = 25; }
-    drawSectionHeader('DESCRIÇÃO DO IMÓVEL', currentY);
-    currentY += 10; // Spacing after header
-    
+    currentY = drawSectionHeader('DESCRIÇÃO DO IMÓVEL', currentY);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(50, 50, 50);
-    doc.setFontSize(11); // Increased font size
-    const splitPropDesc = doc.splitTextToSize(data.propertyDescription, pageWidth - 50);
-    doc.text(splitPropDesc, 25, currentY);
-    currentY += (splitPropDesc.length * 5) + 15;
+    doc.setFontSize(11);
+    const splitPropDesc = doc.splitTextToSize(data.propertyDescription, contentWidth - 10);
+    doc.text(splitPropDesc, margin + 5, currentY);
+    currentY += (splitPropDesc.length * 5) + SECTION_GAP;
   }
 
   // Rooms and Items
   for (const room of data.rooms) {
-    // Smart page break: Calculate minimum height needed for room header + first content
-    let minRoomHeight = 30; // Line + Title + Padding
+    // Smart page break for room
+    let minRoomHeight = 25;
     if (room.description) minRoomHeight += 15;
-    if (room.photos && room.photos.length > 0) minRoomHeight += 60; // Title + at least one photo row
-    else if (room.items && room.items.length > 0) minRoomHeight += 40; // Table header + at least one row
+    if (room.photos && room.photos.length > 0) minRoomHeight += 60;
+    else if (room.items && room.items.length > 0) minRoomHeight += 40;
 
-    if (currentY + minRoomHeight > 280) { 
-      doc.addPage(); 
-      currentY = 25; 
-    }
+    currentY = checkPageBreak(minRoomHeight, currentY);
 
     doc.setDrawColor(0, 58, 90);
     doc.setLineWidth(0.5);
-    doc.line(20, currentY, pageWidth - 20, currentY);
+    doc.line(margin, currentY, pageWidth - margin, currentY);
     currentY += 10;
 
-    doc.setFontSize(12); // Standardized room title size
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 58, 90);
-    doc.text(room.name.toUpperCase(), 20, currentY);
+    doc.text(room.name.toUpperCase(), margin, currentY);
     currentY += 8;
 
     if (room.description) {
-      doc.setFontSize(11); // Increased font size
-      doc.setFont('helvetica', 'normal'); // Removed italics
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
       doc.setTextColor(80, 80, 80);
-      const splitDesc = doc.splitTextToSize(`Observação: ${room.description}`, pageWidth - 40);
-      doc.text(splitDesc, 20, currentY);
+      const splitDesc = doc.splitTextToSize(`Observação: ${room.description}`, contentWidth);
+      doc.text(splitDesc, margin, currentY);
       currentY += (splitDesc.length * 5) + 5;
     } else {
       currentY += 2;
@@ -221,20 +227,16 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
     // Room Photos
     if (room.photos && room.photos.length > 0) {
-      // Only break if we are really at the bottom, otherwise the smart break at the start handled it
-      if (currentY > 240) {
-        doc.addPage();
-        currentY = 20;
-      }
+      currentY = checkPageBreak(30, currentY);
       
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
-      doc.text(`Fotos do Ambiente - ${room.name}`, 20, currentY);
+      doc.text(`Fotos do Ambiente - ${room.name}`, margin, currentY);
       currentY += 10;
 
-      const photoWidth = (pageWidth - 50) / 2;
+      const photoWidth = (contentWidth - 10) / 2;
       const spacing = 10;
-      let photoX = 20;
+      let photoX = margin;
       let maxRowHeight = 0;
 
       for (const photo of room.photos) {
@@ -242,18 +244,15 @@ export const generateInspectionPDF = async (data: InspectionData) => {
           const props = doc.getImageProperties(photo);
           const h = (props.height / props.width) * photoWidth;
 
-          if (currentY + h > 275) {
-            doc.addPage();
-            currentY = 20;
-            photoX = 20;
-          }
+          currentY = checkPageBreak(h + 10, currentY);
+          if (currentY === margin + 5) photoX = margin;
 
           doc.addImage(photo, 'JPEG', photoX, currentY, photoWidth, h);
           maxRowHeight = Math.max(maxRowHeight, h);
           
-          if (photoX > 20) {
+          if (photoX > margin) {
             currentY += maxRowHeight + spacing;
-            photoX = 20;
+            photoX = margin;
             maxRowHeight = 0;
           } else {
             photoX += photoWidth + spacing;
@@ -262,13 +261,13 @@ export const generateInspectionPDF = async (data: InspectionData) => {
           console.error('Error adding room image to PDF:', e);
         }
       }
-      if (photoX > 20) {
+      if (photoX > margin) {
         currentY += maxRowHeight + spacing;
       }
       currentY += 5;
     }
 
-    // Skip items table and item photos for "Chaves" room OR if room has no items
+    // Items
     if (room.name.toLowerCase() !== 'chaves' && room.items && room.items.length > 0) {
       const tableData = room.items.map(item => [
         item.name,
@@ -284,7 +283,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
         theme: 'striped',
         headStyles: { fillColor: [0, 58, 90], textColor: 'white', fontSize: 11 },
         bodyStyles: { fontSize: 11 },
-        margin: { left: 20, right: 20 },
+        margin: { left: margin, right: margin },
         didDrawPage: (data: any) => {
           currentY = data.cursor.y + 10;
         }
@@ -292,50 +291,44 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
       currentY = (doc as any).lastAutoTable.finalY + 10;
 
-      // Photos for each item in this room
+      // Item Photos
       for (const item of room.items) {
         if (item.photos && item.photos.length > 0) {
-          // Smart break for item: Title + at least one photo row
-          if (currentY > 220) {
-            doc.addPage();
-            currentY = 20;
-          }
+          currentY = checkPageBreak(40, currentY);
           
           doc.setFontSize(11);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(0, 58, 90);
           const itemTitle = `Fotos - ${room.name} - ${item.name}${item.hasFurniture ? ' - Com Avaria' : ''}`;
-          doc.text(itemTitle, 20, currentY);
+          doc.text(itemTitle, margin, currentY);
           currentY += 7;
 
-          // Observations (Description)
           if (item.description) {
-            doc.setFontSize(11); // Increased font size
+            doc.setFontSize(11);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(80, 80, 80);
-            const splitObs = doc.splitTextToSize(`Observações: ${item.description}`, pageWidth - 40);
-            doc.text(splitObs, 20, currentY);
+            const splitObs = doc.splitTextToSize(`Observações: ${item.description}`, contentWidth);
+            doc.text(splitObs, margin, currentY);
             currentY += (splitObs.length * 5) + 2;
           } else {
             currentY += 2;
           }
 
-          // Damage Description
           if (item.hasFurniture && item.furnitureDescription) {
-            doc.setFontSize(11); // Increased font size
-            doc.setFont('helvetica', 'normal'); // Removed italics
-            doc.setTextColor(150, 0, 0); // Red for damage description
-            const splitAvaria = doc.splitTextToSize(`Descrição da Avaria: ${item.furnitureDescription}`, pageWidth - 40);
-            doc.text(splitAvaria, 20, currentY);
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(150, 0, 0);
+            const splitAvaria = doc.splitTextToSize(`Descrição da Avaria: ${item.furnitureDescription}`, contentWidth);
+            doc.text(splitAvaria, margin, currentY);
             currentY += (splitAvaria.length * 5) + 5;
-            doc.setTextColor(0, 58, 90); // Reset color
+            doc.setTextColor(0, 58, 90);
           } else {
             currentY += 5;
           }
 
-          const photoWidth = (pageWidth - 50) / 2;
+          const photoWidth = (contentWidth - 10) / 2;
           const spacing = 10;
-          let photoX = 20;
+          let photoX = margin;
           let maxRowHeight = 0;
 
           for (const photo of item.photos) {
@@ -343,18 +336,15 @@ export const generateInspectionPDF = async (data: InspectionData) => {
               const props = doc.getImageProperties(photo);
               const h = (props.height / props.width) * photoWidth;
 
-              if (currentY + h > 275) {
-                doc.addPage();
-                currentY = 20;
-                photoX = 20;
-              }
+              currentY = checkPageBreak(h + 10, currentY);
+              if (currentY === margin + 5) photoX = margin;
 
               doc.addImage(photo, 'JPEG', photoX, currentY, photoWidth, h);
               maxRowHeight = Math.max(maxRowHeight, h);
               
-              if (photoX > 20) {
+              if (photoX > margin) {
                 currentY += maxRowHeight + spacing;
-                photoX = 20;
+                photoX = margin;
                 maxRowHeight = 0;
               } else {
                 photoX += photoWidth + spacing;
@@ -363,71 +353,42 @@ export const generateInspectionPDF = async (data: InspectionData) => {
               console.error('Error adding item image to PDF:', e);
             }
           }
-          if (photoX > 20) {
+          if (photoX > margin) {
             currentY += maxRowHeight + spacing;
           }
           currentY += 10;
         }
       }
-    } else {
-      // For "Chaves" room, just add a bit of spacing if there were photos
-      if (room.photos && room.photos.length > 0) {
-        currentY += 5;
-      }
     }
   }
 
-  // Inspector Opinion Section
+  // Inspector Opinion
   if (data.inspectorOpinion) {
-    if (currentY > 230) {
-      doc.addPage();
-      currentY = 25;
-    } else {
-      currentY += 15;
-    }
-    
-    drawSectionHeader('PARECER DO VISTORIADOR', currentY);
-    currentY += 8;
-    
-    doc.setFontSize(11); // Increased font size
+    currentY = drawSectionHeader('PARECER DO VISTORIADOR', currentY);
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(50, 50, 50);
-    const splitOpinion = doc.splitTextToSize(data.inspectorOpinion, pageWidth - 50);
-    doc.text(splitOpinion, 25, currentY);
-    currentY += (splitOpinion.length * 5) + 15;
+    const splitOpinion = doc.splitTextToSize(data.inspectorOpinion, contentWidth - 10);
+    doc.text(splitOpinion, margin + 5, currentY);
+    currentY += (splitOpinion.length * 5) + SECTION_GAP;
   }
 
-  // Signatures Section
-  if (currentY > 200) {
-    doc.addPage();
-    currentY = 30;
-  } else {
-    currentY += 20;
-  }
-
-  drawSectionHeader('TERMO DE ENCERRAMENTO E ASSINATURAS', currentY);
-  currentY += 15;
-
-  doc.setFontSize(11); // Increased font size
+  // Signatures
+  currentY = drawSectionHeader('TERMO DE ENCERRAMENTO E ASSINATURAS', currentY);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(50, 50, 50);
   const closureText = "As partes acima identificadas declaram estar de acordo com o estado de conservação do imóvel descrito neste laudo de vistoria, ratificando todas as informações e fotos aqui constantes.";
-  const splitClosure = doc.splitTextToSize(closureText, pageWidth - 50);
-  doc.text(splitClosure, 25, currentY);
+  const splitClosure = doc.splitTextToSize(closureText, contentWidth - 10);
+  doc.text(splitClosure, margin + 5, currentY);
   currentY += (splitClosure.length * 5) + 10;
 
   const contestText = "O prazo de contestação é de 5 dias úteis, contando a partir da data de emissão deste laudo.";
-  const splitContest = doc.splitTextToSize(contestText, pageWidth - 50);
-  doc.text(splitContest, 25, currentY);
+  const splitContest = doc.splitTextToSize(contestText, contentWidth - 10);
+  doc.text(splitContest, margin + 5, currentY);
   currentY += (splitContest.length * 5) + 15;
 
-  // City and Date
-  const emissionDate = new Date();
-  const formattedDate = emissionDate.toLocaleDateString('pt-BR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  });
+  const formattedDate = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
   const locationDateText = `${data.property.city}, ${formattedDate}.`;
   doc.setFont('helvetica', 'bold');
   doc.text(locationDateText, pageWidth / 2, currentY, { align: 'center' });
@@ -438,81 +399,45 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   const totalWidth = (sigWidth * 2) + sigSpacing;
   const startX = (pageWidth - totalWidth) / 2;
 
-  doc.setFontSize(10); // Increased font size for signature labels and names
-  
-  // Collect all people who need to sign
   const signers: { label: string; person: Person }[] = [];
-
   if (data.type === 'venda') {
-    if (data.seller && data.seller.name) signers.push({ label: 'Vendedor', person: data.seller });
-    if (data.buyer && data.buyer.name) signers.push({ label: 'Comprador', person: data.buyer });
+    if (data.seller?.name) signers.push({ label: 'Vendedor', person: data.seller });
+    if (data.buyer?.name) signers.push({ label: 'Comprador', person: data.buyer });
   } else {
-    if (data.owner && data.owner.name) signers.push({ label: 'Proprietário', person: data.owner });
-    if (data.tenant && data.tenant.name) signers.push({ label: 'Inquilino', person: data.tenant });
+    if (data.owner?.name) signers.push({ label: 'Proprietário', person: data.owner });
+    if (data.tenant?.name) signers.push({ label: 'Inquilino', person: data.tenant });
   }
-
-  // Inspector is always the last signature
   signers.push({ label: 'Vistoriador', person: data.inspector });
 
-  // Draw signers in rows of 2
   for (let i = 0; i < signers.length; i++) {
     const signer = signers[i];
     const isEven = i % 2 === 0;
-    const row = Math.floor(i / 2);
     
-    // Check for page break before starting a new row
-    if (isEven && currentY + 40 > 280) {
-      doc.addPage();
-      currentY = 30;
-    }
+    if (isEven) currentY = checkPageBreak(40, currentY);
 
-    const x = isEven ? startX : startX + sigWidth + sigSpacing;
-    const y = currentY + (row * 35); // This y is for the line
+    let finalX = isEven ? startX : startX + sigWidth + sigSpacing;
+    if (i === 2 && signers.length === 3) finalX = (pageWidth - sigWidth) / 2;
 
-    // If it's the last signer and it's an odd index (centered)
-    let finalX = x;
-    if (!isEven && i === signers.length - 1) {
-      // Already handled by the grid logic, but if we wanted to center the last one if it's alone:
-      // But here we have 3 signers usually, so 0, 1 in row 0, and 2 in row 1.
-    }
-    
-    // If it's the 3rd signer (index 2), center it
-    if (i === 2 && signers.length === 3) {
-      finalX = (pageWidth - sigWidth) / 2;
-    }
-
-    const lineY = currentY;
     doc.setDrawColor(150, 150, 150);
-    doc.line(finalX, lineY, finalX + sigWidth, lineY);
+    doc.line(finalX, currentY, finalX + sigWidth, currentY);
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text(signer.label, finalX + sigWidth / 2, lineY + 5, { align: 'center' });
+    doc.text(signer.label, finalX + sigWidth / 2, currentY + 5, { align: 'center' });
     doc.setFont('helvetica', 'normal');
-    doc.text(signer.person.name, finalX + sigWidth / 2, lineY + 10, { align: 'center' });
-    doc.text(`CPF: ${signer.person.cpf}`, finalX + sigWidth / 2, lineY + 14, { align: 'center' });
+    doc.text(signer.person.name, finalX + sigWidth / 2, currentY + 10, { align: 'center' });
+    doc.text(`CPF: ${signer.person.cpf}`, finalX + sigWidth / 2, currentY + 14, { align: 'center' });
 
-    if (!isEven || i === signers.length - 1) {
-      currentY += 35;
-    }
+    if (!isEven || i === signers.length - 1) currentY += 35;
   }
 
-  // Footer on each page
+  // Page Numbers and Footer
   const pageCount = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(10);
     doc.setTextColor(150, 150, 150);
-    doc.text(
-      'Uchi Imóveis',
-      pageWidth / 2,
-      doc.internal.pageSize.getHeight() - 15,
-      { align: 'center' }
-    );
-    doc.text(
-      `Página ${i} de ${pageCount}`,
-      pageWidth / 2,
-      doc.internal.pageSize.getHeight() - 10,
-      { align: 'center' }
-    );
+    doc.text('Uchi Imóveis', pageWidth / 2, pageHeight - 15, { align: 'center' });
+    doc.text(`Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
   }
 
   doc.save(`laudo-vistoria-${data.property.address.replace(/\s+/g, '-').toLowerCase()}.pdf`);

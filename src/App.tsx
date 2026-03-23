@@ -24,7 +24,8 @@ import {
   FileText,
   Download,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Copy
 } from 'lucide-react';
 import { generateInspectionPDF } from './services/pdfService';
 import { 
@@ -709,6 +710,61 @@ export default function App() {
     });
   };
 
+  const duplicateInspection = async (ins: Inspection) => {
+    setLoading(true);
+    try {
+      // 1. Fetch all rooms for the source inspection
+      const roomsQuery = query(collection(db, `inspections/${ins.id}/rooms`), orderBy('order'));
+      const roomsSnapshot = await getDocs(roomsQuery);
+      const roomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+      
+      // 2. Fetch all items for all rooms
+      const itemsMap: { [roomId: string]: Item[] } = {};
+      for (const room of roomsData) {
+        const itemsQuery = query(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`), orderBy('order'));
+        const itemsSnapshot = await getDocs(itemsQuery);
+        itemsMap[room.id] = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+      }
+
+      // 3. Create the new inspection
+      const newInspectionData = {
+        ...ins,
+        address: `${ins.address} (Cópia)`,
+        date: new Date().toISOString(),
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      // Remove id before adding
+      delete (newInspectionData as any).id;
+      
+      const inspectionRef = await addDoc(collection(db, 'inspections'), newInspectionData);
+      const newInspectionId = inspectionRef.id;
+
+      // 4. Create rooms and items in the new inspection
+      for (const room of roomsData) {
+        const newRoomData = { ...room };
+        delete (newRoomData as any).id;
+        const roomRef = await addDoc(collection(db, `inspections/${newInspectionId}/rooms`), newRoomData);
+        const newRoomId = roomRef.id;
+
+        const items = itemsMap[room.id] || [];
+        for (const item of items) {
+          const newItemData = { ...item };
+          delete (newItemData as any).id;
+          await addDoc(collection(db, `inspections/${newInspectionId}/rooms/${newRoomId}/items`), newItemData);
+        }
+      }
+
+      showToast('Vistoria duplicada com sucesso!', 'success');
+    } catch (error) {
+      console.error('Error duplicating inspection:', error);
+      showToast('Erro ao duplicar vistoria', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleUpdateProperty = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!localInspection) return;
@@ -1194,9 +1250,21 @@ export default function App() {
                               variant="ghost" 
                               onClick={(e) => {
                                 e.stopPropagation();
+                                duplicateInspection(ins);
+                              }} 
+                              className="text-zinc-500 hover:text-brand-blue p-2"
+                              title="Duplicar Vistoria"
+                            >
+                              <Copy size={18} />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 deleteInspection(ins.id);
                               }} 
                               className="text-red-400 hover:text-red-500 p-2"
+                              title="Excluir Vistoria"
                             >
                               <Trash2 size={18} />
                             </Button>
