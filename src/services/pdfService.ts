@@ -416,10 +416,22 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.text(splitClosure, 25, currentY);
   currentY += (splitClosure.length * 5) + 10;
 
-  const contestText = "As partes possuem 5 dias úteis contando a partir do dia de emissão do laudo para contestar os itens desta vistoria.";
+  const contestText = "O prazo de contestação é de 5 dias úteis, contando a partir da data de emissão deste laudo.";
   const splitContest = doc.splitTextToSize(contestText, pageWidth - 50);
   doc.text(splitContest, 25, currentY);
-  currentY += (splitContest.length * 5) + 25;
+  currentY += (splitContest.length * 5) + 15;
+
+  // City and Date
+  const emissionDate = new Date();
+  const formattedDate = emissionDate.toLocaleDateString('pt-BR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+  const locationDateText = `${data.property.city}, ${formattedDate}.`;
+  doc.setFont('helvetica', 'bold');
+  doc.text(locationDateText, 25, currentY);
+  currentY += 20;
 
   const sigWidth = 65;
   const sigSpacing = 20;
@@ -429,9 +441,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.setFontSize(10); // Increased font size for signature labels and names
   
   // Collect all people who need to sign
-  const signers = [
-    { label: 'Vistoriador', person: data.inspector }
-  ];
+  const signers: { label: string; person: Person }[] = [];
 
   if (data.type === 'venda') {
     if (data.seller && data.seller.name) signers.push({ label: 'Vendedor', person: data.seller });
@@ -440,6 +450,9 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     if (data.owner && data.owner.name) signers.push({ label: 'Proprietário', person: data.owner });
     if (data.tenant && data.tenant.name) signers.push({ label: 'Inquilino', person: data.tenant });
   }
+
+  // Inspector is always the last signature
+  signers.push({ label: 'Vistoriador', person: data.inspector });
 
   // Draw signers in rows of 2
   for (let i = 0; i < signers.length; i++) {
