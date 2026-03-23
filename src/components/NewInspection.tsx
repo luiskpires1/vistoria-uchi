@@ -126,7 +126,7 @@ const NewInspection: React.FC<NewInspectionProps> = ({
             )}
           </div>
 
-          <Button className="w-full py-4" icon={isCreating ? undefined : CheckCircle2} disabled={isCreating}>
+          <Button type="submit" className="w-full py-4" icon={isCreating ? undefined : CheckCircle2} disabled={isCreating}>
             {isCreating ? 'Criando Vistoria...' : 'Iniciar Vistoria'}
           </Button>
         </form>
