@@ -30,6 +30,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { generateInspectionPDF } from './services/pdfService';
+import { LoadingScreen } from './components/LoadingScreen';
 import { 
   motion, 
   AnimatePresence,
@@ -153,7 +154,9 @@ const STANDARD_USER = {
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('uchi_logged_in') === 'true');
   const [user] = useState<any>(STANDARD_USER);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('Iniciando...');
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [view, setView] = useState<'dashboard' | 'new' | 'edit'>('dashboard');
   const [currentInspection, setCurrentInspection] = useState<Inspection | null>(null);
@@ -280,7 +283,20 @@ export default function App() {
 
   // Auth removed as per user request
   useEffect(() => {
-    setLoading(false);
+    // Simulate initial loading progress
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += Math.random() * 15;
+      if (progress >= 100) {
+        progress = 100;
+        clearInterval(interval);
+        setTimeout(() => setLoading(false), 500);
+      }
+      setLoadingProgress(progress);
+      setLoadingMessage(progress < 50 ? 'Carregando configurações...' : 'Preparando ambiente...');
+    }, 100);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Fetch Inspections
@@ -520,22 +536,32 @@ export default function App() {
 
   const duplicateInspection = useCallback(async (ins: Inspection) => {
     setLoading(true);
+    setLoadingProgress(0);
+    setLoadingMessage('Iniciando duplicação...');
     try {
       // 1. Fetch all rooms for the source inspection
+      setLoadingMessage('Buscando ambientes...');
       const roomsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms`));
       const roomsData = roomsSnapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as Room))
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       
+      const totalRooms = roomsData.length;
       // 2. Fetch all items for all rooms
       const itemsMap: { [roomId: string]: Item[] } = {};
-      for (const room of roomsData) {
+      for (let i = 0; i < totalRooms; i++) {
+        const room = roomsData[i];
+        setLoadingMessage(`Carregando: ${room.name}...`);
+        setLoadingProgress((i / totalRooms) * 40);
+        
         const itemsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`));
         itemsMap[room.id] = itemsSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as Item))
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       }
 
+      setLoadingProgress(50);
+      setLoadingMessage('Criando nova vistoria...');
       // 3. Create the new inspection
       const newInspectionData = {
         ...ins,
@@ -552,7 +578,11 @@ export default function App() {
       const newInspectionId = inspectionRef.id;
 
       // 4. Create rooms and items in the new inspection
-      for (const room of roomsData) {
+      for (let i = 0; i < totalRooms; i++) {
+        const room = roomsData[i];
+        setLoadingMessage(`Duplicando: ${room.name}...`);
+        setLoadingProgress(50 + (i / totalRooms) * 50);
+        
         const newRoomData = { ...room };
         delete (newRoomData as any).id;
         const roomRef = await addDoc(collection(db, `inspections/${newInspectionId}/rooms`), newRoomData);
@@ -566,11 +596,13 @@ export default function App() {
         }
       }
 
+      setLoadingProgress(100);
+      setLoadingMessage('Vistoria duplicada com sucesso!');
       showToast('Vistoria duplicada com sucesso!', 'success');
+      setTimeout(() => setLoading(false), 500);
     } catch (error) {
       console.error('Error duplicating inspection:', error);
       showToast('Erro ao duplicar vistoria', 'error');
-    } finally {
       setLoading(false);
     }
   }, [showToast]);
@@ -850,16 +882,24 @@ export default function App() {
 
   const handleEditInspection = useCallback(async (ins: Inspection) => {
     setLoading(true);
+    setLoadingProgress(0);
+    setLoadingMessage('Carregando vistoria...');
     try {
       // Fetch all rooms
+      setLoadingMessage('Buscando ambientes...');
       const roomsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms`));
       const roomsData = roomsSnapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as Room))
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       
+      const totalRooms = roomsData.length;
       // Fetch all items for all rooms
       const itemsMap: { [roomId: string]: Item[] } = {};
-      for (const room of roomsData) {
+      for (let i = 0; i < totalRooms; i++) {
+        const room = roomsData[i];
+        setLoadingMessage(`Carregando: ${room.name}...`);
+        setLoadingProgress((i / totalRooms) * 100);
+        
         const itemsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`));
         itemsMap[room.id] = itemsSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as Item))
@@ -875,10 +915,10 @@ export default function App() {
       
       setCurrentInspection(ins);
       setView('edit');
+      setLoading(false);
     } catch (error) {
       console.error('Error loading inspection:', error);
       showToast('Erro ao carregar dados da vistoria', 'error');
-    } finally {
       setLoading(false);
     }
   }, [showToast]);
@@ -926,24 +966,37 @@ export default function App() {
 
   const generateReport = useCallback(async (ins: Inspection) => {
     setLoading(true);
+    setLoadingProgress(0);
+    setLoadingMessage('Iniciando geração do relatório...');
     try {
       let roomsWithItems: any[] = [];
 
       // If we are currently editing THIS inspection, use the local state to include unsaved changes
       if (view === 'edit' && localInspection?.id === ins.id) {
-        roomsWithItems = localRooms.map(room => ({
-          ...room,
-          items: localItems[room.id] || []
-        }));
+        setLoadingMessage('Preparando dados locais...');
+        const total = localRooms.length;
+        roomsWithItems = localRooms.map((room, index) => {
+          setLoadingProgress((index / total) * 50);
+          return {
+            ...room,
+            items: localItems[room.id] || []
+          };
+        });
       } else {
         // Fetch all rooms from Firestore
+        setLoadingMessage('Buscando ambientes...');
         const roomsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms`));
         const roomsData = roomsSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as Room))
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         
+        const totalRooms = roomsData.length;
         // Fetch all items for all rooms
-        for (const room of roomsData) {
+        for (let i = 0; i < totalRooms; i++) {
+          const room = roomsData[i];
+          setLoadingMessage(`Carregando: ${room.name}...`);
+          setLoadingProgress((i / totalRooms) * 60);
+          
           const itemsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`));
           const items = itemsSnapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() } as Item))
@@ -956,17 +1009,22 @@ export default function App() {
         }
       }
 
+      setLoadingProgress(70);
+      setLoadingMessage('Gerando PDF...');
+      
       const reportData = {
         ...ins,
         rooms: roomsWithItems
       };
 
       await generateInspectionPDF(reportData as any);
+      setLoadingProgress(100);
+      setLoadingMessage('Relatório concluído!');
       showToast('Relatório gerado com sucesso!', 'success');
+      setTimeout(() => setLoading(false), 500);
     } catch (error) {
       console.error('Error generating report:', error);
       showToast('Erro ao gerar relatório', 'error');
-    } finally {
       setLoading(false);
     }
   }, [view, localInspection, localRooms, localItems, showToast]);
@@ -988,12 +1046,11 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="w-12 h-12 bg-zinc-200 rounded-full" />
-          <div className="h-4 w-32 bg-zinc-200 rounded" />
-        </div>
-      </div>
+      <LoadingScreen 
+        progress={loadingProgress} 
+        message={loadingMessage} 
+        logoUrl={LOGO_URL} 
+      />
     );
   }
 
