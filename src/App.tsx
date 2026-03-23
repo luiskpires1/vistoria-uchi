@@ -199,23 +199,23 @@ const Badge = ({ children, variant = 'neutral' }: any) => {
 const Modal = ({ isOpen, onClose, title, children, footer }: any) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto">
       <motion.div 
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-md my-auto flex flex-col"
       >
-        <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
+        <div className="p-6 border-b border-zinc-100 flex items-center justify-between flex-shrink-0">
           <h3 className="text-xl font-bold text-zinc-900">{title}</h3>
           <button onClick={onClose} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
             <X size={20} />
           </button>
         </div>
-        <div className="p-6">
+        <div className="p-6 overflow-y-visible">
           {children}
         </div>
         {footer && (
-          <div className="p-6 bg-zinc-50 border-t border-zinc-100 flex justify-end gap-3">
+          <div className="p-6 bg-zinc-50 border-t border-zinc-100 flex justify-end gap-3 flex-shrink-0">
             {footer}
           </div>
         )}
