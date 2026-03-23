@@ -138,7 +138,7 @@ const formatCEP = (value: string) => {
 
 // --- Constants ---
 
-const LOGO_URL = "https://ais-pre-rwp7gfhhrnm5kvzj7mq5rl-136253274741.us-east1.run.app/logo.png";
+const LOGO_URL = "/logo.png";
 const DEFAULT_USER = { displayName: 'Uchi Imóveis', email: 'contato@uchiimoveis.com.br' };
 
 // --- Main App ---
@@ -1001,13 +1001,13 @@ export default function App() {
     <ErrorBoundary>
       <div className="min-h-screen bg-zinc-50 text-brand-blue font-sans pb-32">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-bottom border-zinc-200 px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-200 bg-white">
             <img 
               src={LOGO_URL} 
               alt="Uchi Vistorias Logo" 
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
               referrerPolicy="no-referrer"
               onError={(e) => {
                 // Fallback to home icon if image fails

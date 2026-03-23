@@ -30,7 +30,7 @@ const Login = React.memo(({ onLogin }: { onLogin: () => void }) => {
             <img 
               src={LOGO_URL} 
               alt="Uchi Vistorias Logo" 
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
               referrerPolicy="no-referrer"
               onError={(e) => {
                 (e.target as any).style.display = 'none';
