@@ -259,6 +259,7 @@ export default function App() {
         ctx?.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/jpeg', quality));
       };
+      img.onerror = () => resolve(base64Str); // Fallback to original if compression fails
     });
   };
 
@@ -521,16 +522,18 @@ export default function App() {
     setLoading(true);
     try {
       // 1. Fetch all rooms for the source inspection
-      const roomsQuery = query(collection(db, `inspections/${ins.id}/rooms`), orderBy('order'));
-      const roomsSnapshot = await getDocs(roomsQuery);
-      const roomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+      const roomsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms`));
+      const roomsData = roomsSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Room))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       
       // 2. Fetch all items for all rooms
       const itemsMap: { [roomId: string]: Item[] } = {};
       for (const room of roomsData) {
-        const itemsQuery = query(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`), orderBy('order'));
-        const itemsSnapshot = await getDocs(itemsQuery);
-        itemsMap[room.id] = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+        const itemsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`));
+        itemsMap[room.id] = itemsSnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as Item))
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       }
 
       // 3. Create the new inspection
@@ -849,16 +852,18 @@ export default function App() {
     setLoading(true);
     try {
       // Fetch all rooms
-      const roomsQuery = query(collection(db, `inspections/${ins.id}/rooms`), orderBy('order'));
-      const roomsSnapshot = await getDocs(roomsQuery);
-      const roomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+      const roomsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms`));
+      const roomsData = roomsSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Room))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       
       // Fetch all items for all rooms
       const itemsMap: { [roomId: string]: Item[] } = {};
       for (const room of roomsData) {
-        const itemsQuery = query(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`), orderBy('order'));
-        const itemsSnapshot = await getDocs(itemsQuery);
-        itemsMap[room.id] = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+        const itemsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`));
+        itemsMap[room.id] = itemsSnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as Item))
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       }
       
       setLocalInspection({ ...ins });
@@ -922,25 +927,38 @@ export default function App() {
   const generateReport = useCallback(async (ins: Inspection) => {
     setLoading(true);
     try {
-      // Fetch all rooms
-      const roomsQuery = query(collection(db, `inspections/${ins.id}/rooms`), orderBy('order'));
-      const roomsSnapshot = await getDocs(roomsQuery);
-      const roomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
-      
-      // Fetch all items for all rooms
-      const itemsMap: { [roomId: string]: Item[] } = {};
-      for (const room of roomsData) {
-        const itemsQuery = query(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`), orderBy('order'));
-        const itemsSnapshot = await getDocs(itemsQuery);
-        itemsMap[room.id] = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+      let roomsWithItems: any[] = [];
+
+      // If we are currently editing THIS inspection, use the local state to include unsaved changes
+      if (view === 'edit' && localInspection?.id === ins.id) {
+        roomsWithItems = localRooms.map(room => ({
+          ...room,
+          items: localItems[room.id] || []
+        }));
+      } else {
+        // Fetch all rooms from Firestore
+        const roomsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms`));
+        const roomsData = roomsSnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as Room))
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        
+        // Fetch all items for all rooms
+        for (const room of roomsData) {
+          const itemsSnapshot = await getDocs(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`));
+          const items = itemsSnapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() } as Item))
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          
+          roomsWithItems.push({
+            ...room,
+            items
+          });
+        }
       }
 
       const reportData = {
         ...ins,
-        rooms: roomsData.map(room => ({
-          ...room,
-          items: itemsMap[room.id] || []
-        }))
+        rooms: roomsWithItems
       };
 
       await generateInspectionPDF(reportData as any);
@@ -951,7 +969,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [view, localInspection, localRooms, localItems, showToast]);
 
   const removePhoto = useCallback((itemId: string, photoIndex: number) => {
     if (!selectedRoom) return;

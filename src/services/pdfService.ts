@@ -279,19 +279,26 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
       for (const photo of room.photos) {
         try {
+          if (!photo) continue;
+          
           // Force landscape aspect ratio (4:3)
           const targetAspectRatio = 4 / 3;
           const h = photoWidth / targetAspectRatio;
 
+          const oldY = currentY;
           currentY = checkPageBreak(h + 10, currentY);
-          if (currentY === margin + 5) photoX = margin;
+          if (currentY < oldY) {
+            // New page was added
+            photoX = margin;
+          }
 
           // Detect format from data URI
           let format = 'JPEG';
           if (photo.startsWith('data:image/png')) format = 'PNG';
-          if (photo.startsWith('data:image/webp')) format = 'WEBP';
+          else if (photo.startsWith('data:image/webp')) format = 'WEBP';
+          else if (photo.startsWith('data:image/gif')) format = 'GIF';
 
-          doc.addImage(photo, format, photoX, currentY, photoWidth, h);
+          doc.addImage(photo, format, photoX, currentY, photoWidth, h, undefined, 'FAST');
           maxRowHeight = Math.max(maxRowHeight, h);
           
           if (photoX > margin) {
@@ -302,7 +309,18 @@ export const generateInspectionPDF = async (data: InspectionData) => {
             photoX += photoWidth + spacing;
           }
         } catch (e) {
-          console.error('Error adding room image to PDF:', e);
+          console.error(`Error adding room image (${room.name}) to PDF:`, e);
+          // Add a placeholder or text indicating image error
+          doc.setFontSize(8);
+          doc.setTextColor(150, 150, 150);
+          doc.text('[Erro ao carregar imagem]', photoX + 5, currentY + 10);
+          
+          if (photoX > margin) {
+            currentY += 20 + spacing;
+            photoX = margin;
+          } else {
+            photoX += photoWidth + spacing;
+          }
         }
       }
       if (photoX > margin) {
@@ -377,19 +395,26 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
           for (const photo of item.photos) {
             try {
+              if (!photo) continue;
+
               // Force landscape aspect ratio (4:3)
               const targetAspectRatio = 4 / 3;
               const h = photoWidth / targetAspectRatio;
 
+              const oldY = currentY;
               currentY = checkPageBreak(h + 10, currentY);
-              if (currentY === margin + 5) photoX = margin;
+              if (currentY < oldY) {
+                // New page was added
+                photoX = margin;
+              }
 
               // Detect format from data URI
               let format = 'JPEG';
               if (photo.startsWith('data:image/png')) format = 'PNG';
-              if (photo.startsWith('data:image/webp')) format = 'WEBP';
+              else if (photo.startsWith('data:image/webp')) format = 'WEBP';
+              else if (photo.startsWith('data:image/gif')) format = 'GIF';
 
-              doc.addImage(photo, format, photoX, currentY, photoWidth, h);
+              doc.addImage(photo, format, photoX, currentY, photoWidth, h, undefined, 'FAST');
               maxRowHeight = Math.max(maxRowHeight, h);
               
               if (photoX > margin) {
@@ -400,7 +425,17 @@ export const generateInspectionPDF = async (data: InspectionData) => {
                 photoX += photoWidth + spacing;
               }
             } catch (e) {
-              console.error('Error adding item image to PDF:', e);
+              console.error(`Error adding item image (${room.name} - ${item.name}) to PDF:`, e);
+              doc.setFontSize(8);
+              doc.setTextColor(150, 150, 150);
+              doc.text('[Erro ao carregar imagem]', photoX + 5, currentY + 10);
+
+              if (photoX > margin) {
+                currentY += 20 + spacing;
+                photoX = margin;
+              } else {
+                photoX += photoWidth + spacing;
+              }
             }
           }
           if (photoX > margin) {
