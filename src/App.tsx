@@ -777,7 +777,6 @@ export default function App() {
     const neighborhood = formData.get('neighborhood') as string;
     const city = formData.get('city') as string;
     const cep = formData.get('cep') as string;
-    const status = formData.get('status') as InspectionStatus;
 
     const inspectorName = formData.get('inspectorName') as string;
     const inspectorCpf = formData.get('inspectorCpf') as string;
@@ -801,7 +800,6 @@ export default function App() {
         city,
         cep
       },
-      status,
       inspector: { name: inspectorName, cpf: inspectorCpf }
     };
 
@@ -1229,7 +1227,9 @@ export default function App() {
                                 <Calendar size={12} />
                                 {new Date(ins.date).toLocaleDateString()}
                               </span>
-                              {ins.status === 'completed' && <Badge variant="success">Finalizada</Badge>}
+                              <Badge variant={ins.status === 'completed' ? 'success' : 'warning'}>
+                                {ins.status === 'completed' ? 'Finalizada' : 'Em andamento'}
+                              </Badge>
                               {ins.property?.neighborhood && (
                                 <span className="text-xs text-zinc-400">• {ins.property.neighborhood}</span>
                               )}
@@ -1507,6 +1507,24 @@ export default function App() {
                       </div>
                       <span>Editar Dados do Imóvel</span>
                     </button>
+
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="p-1.5 bg-zinc-100 rounded-lg">
+                        <ClipboardList size={12} className="text-zinc-500" />
+                      </div>
+                      <select 
+                        value={localInspection.status}
+                        onChange={(e) => {
+                          const newStatus = e.target.value as InspectionStatus;
+                          setLocalInspection(prev => prev ? { ...prev, status: newStatus } : null);
+                          setHasUnsavedChanges(true);
+                        }}
+                        className="bg-transparent text-xs font-bold uppercase tracking-wider text-zinc-600 outline-none cursor-pointer hover:text-brand-blue transition-colors"
+                      >
+                        <option value="draft">Em andamento</option>
+                        <option value="completed">Finalizada</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1965,17 +1983,6 @@ export default function App() {
                       <label className="text-sm font-semibold text-zinc-700">CEP</label>
                       <input name="cep" required onChange={handleCEPChange} defaultValue={localInspection.property?.cep} placeholder="00000-000" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-zinc-700">Status da Vistoria</label>
-                    <select 
-                      name="status" 
-                      defaultValue={localInspection.status}
-                      className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue"
-                    >
-                      <option value="draft">Em andamento</option>
-                      <option value="completed">Finalizada</option>
-                    </select>
                   </div>
                 </div>
               </div>

@@ -220,8 +220,8 @@ export const generateInspectionPDF = async (data: InspectionData) => {
       head: [['Ambiente', 'Item', 'Descrição da Avaria']],
       body: damageTableData,
       theme: 'striped',
-      headStyles: { fillColor: [150, 0, 0], textColor: 'white', fontSize: 11 },
-      bodyStyles: { fontSize: 11 },
+      headStyles: { fillColor: [245, 245, 245], textColor: [0, 58, 90], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 11, textColor: [180, 0, 0] }, // Red text for damages
       margin: { left: margin, right: margin },
       didDrawPage: (data: any) => {
         currentY = data.cursor.y + 10;
@@ -280,7 +280,9 @@ export const generateInspectionPDF = async (data: InspectionData) => {
       for (const photo of room.photos) {
         try {
           const props = doc.getImageProperties(photo);
-          const h = (props.height / props.width) * photoWidth;
+          // Force landscape aspect ratio (4:3)
+          const targetAspectRatio = 4 / 3;
+          const h = photoWidth / targetAspectRatio;
 
           currentY = checkPageBreak(h + 10, currentY);
           if (currentY === margin + 5) photoX = margin;
@@ -372,7 +374,9 @@ export const generateInspectionPDF = async (data: InspectionData) => {
           for (const photo of item.photos) {
             try {
               const props = doc.getImageProperties(photo);
-              const h = (props.height / props.width) * photoWidth;
+              // Force landscape aspect ratio (4:3)
+              const targetAspectRatio = 4 / 3;
+              const h = photoWidth / targetAspectRatio;
 
               currentY = checkPageBreak(h + 10, currentY);
               if (currentY === margin + 5) photoX = margin;
@@ -412,6 +416,9 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   }
 
   // Signatures
+  // Ensure title and all signatures are on the same page if possible
+  // Estimating height: title(15) + closure(15) + contest(10) + date(15) + signatures(80) = ~135
+  currentY = checkPageBreak(135, currentY);
   currentY = drawSectionHeader('TERMO DE ENCERRAMENTO E ASSINATURAS', currentY);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
