@@ -122,20 +122,6 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.text(`Status: ${data.status === 'completed' ? 'FINALIZADA' : 'EM RASCUNHO'}`, 25, currentY);
   currentY += 15; // Standardized spacing between sections
 
-  // Property Description Section (Moved to first page)
-  if (data.propertyDescription) {
-    if (currentY > 240) { doc.addPage(); currentY = 25; }
-    drawSectionHeader('DESCRIÇÃO DO IMÓVEL', currentY);
-    currentY += 10; // Spacing after header
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(50, 50, 50);
-    doc.setFontSize(11); // Increased font size
-    const splitPropDesc = doc.splitTextToSize(data.propertyDescription, pageWidth - 50);
-    doc.text(splitPropDesc, 25, currentY);
-    currentY += (splitPropDesc.length * 5) + 15;
-  }
-
   // Parties Info
   if (currentY > 260) { doc.addPage(); currentY = 25; }
   drawSectionHeader('PARTES ENVOLVIDAS', currentY);
@@ -183,6 +169,20 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.text('Regular: Com avarias.', 25, currentY + 10);
   doc.text('Ruim: Com danos graves/relevantes.', 25, currentY + 15);
   currentY += 30; // Set currentY to 15pt below the last line of this section
+
+  // Property Description Section
+  if (data.propertyDescription) {
+    if (currentY > 240) { doc.addPage(); currentY = 25; }
+    drawSectionHeader('DESCRIÇÃO DO IMÓVEL', currentY);
+    currentY += 10; // Spacing after header
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(50, 50, 50);
+    doc.setFontSize(11); // Increased font size
+    const splitPropDesc = doc.splitTextToSize(data.propertyDescription, pageWidth - 50);
+    doc.text(splitPropDesc, 25, currentY);
+    currentY += (splitPropDesc.length * 5) + 15;
+  }
 
   // Rooms and Items
   for (const room of data.rooms) {
@@ -430,7 +430,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   });
   const locationDateText = `${data.property.city}, ${formattedDate}.`;
   doc.setFont('helvetica', 'bold');
-  doc.text(locationDateText, 25, currentY);
+  doc.text(locationDateText, pageWidth / 2, currentY, { align: 'center' });
   currentY += 20;
 
   const sigWidth = 65;
