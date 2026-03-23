@@ -893,22 +893,36 @@ export default function App() {
   };
 
   const handleRoomPhotoUpload = async (roomId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     const room = localRooms.find(r => r.id === roomId);
-    if (room && (room.photos?.length || 0) >= 10) {
+    const currentPhotos = room?.photos || [];
+    
+    if (currentPhotos.length + files.length > 10) {
       showToast('Limite de 10 fotos por ambiente atingido.', 'error');
-      return;
+      // We'll still process up to the limit if possible, or just return
+      if (currentPhotos.length >= 10) return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64String = reader.result as string;
-      const compressedBase64 = await compressImage(base64String);
-      updateRoomDetails(roomId, { photos: [...(room?.photos || []), compressedBase64] });
-    };
-    reader.readAsDataURL(file);
+    const newPhotos: string[] = [...currentPhotos];
+    const filesToProcess = Array.from(files).slice(0, 10 - currentPhotos.length) as File[];
+
+    for (const file of filesToProcess) {
+      const reader = new FileReader();
+      const promise = new Promise<string>((resolve) => {
+        reader.onloadend = async () => {
+          const base64String = reader.result as string;
+          const compressedBase64 = await compressImage(base64String);
+          resolve(compressedBase64);
+        };
+      });
+      reader.readAsDataURL(file);
+      const compressed = await promise;
+      newPhotos.push(compressed);
+    }
+
+    updateRoomDetails(roomId, { photos: newPhotos });
   };
 
   const removeRoomPhoto = (roomId: string, photoIndex: number) => {
@@ -983,24 +997,36 @@ export default function App() {
   };
 
   const handlePhotoUpload = async (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     const item = (localItems[selectedRoom?.id || ''] || []).find(i => i.id === itemId);
-    if (item && (item.photos?.length || 0) >= 10) {
+    if (!item) return;
+
+    const currentPhotos = item.photos || [];
+    if (currentPhotos.length + files.length > 10) {
       showToast('Limite de 10 fotos por item atingido.', 'error');
-      return;
+      if (currentPhotos.length >= 10) return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64String = reader.result as string;
-      const compressedBase64 = await compressImage(base64String);
-      if (item) {
-        updateItem(itemId, { photos: [...item.photos, compressedBase64] });
-      }
-    };
-    reader.readAsDataURL(file);
+    const newPhotos: string[] = [...currentPhotos];
+    const filesToProcess = Array.from(files).slice(0, 10 - currentPhotos.length) as File[];
+
+    for (const file of filesToProcess) {
+      const reader = new FileReader();
+      const promise = new Promise<string>((resolve) => {
+        reader.onloadend = async () => {
+          const base64String = reader.result as string;
+          const compressedBase64 = await compressImage(base64String);
+          resolve(compressedBase64);
+        };
+      });
+      reader.readAsDataURL(file);
+      const compressed = await promise;
+      newPhotos.push(compressed);
+    }
+
+    updateItem(itemId, { photos: newPhotos });
   };
 
   const removePhoto = (itemId: string, photoIndex: number) => {
@@ -1586,6 +1612,7 @@ export default function App() {
                               <input 
                                 type="file" 
                                 accept="image/*" 
+                                multiple
                                 className="hidden" 
                                 onChange={(e) => handleRoomPhotoUpload(currentRoom.id, e)} 
                               />
@@ -1740,6 +1767,7 @@ export default function App() {
                                     <input 
                                       type="file" 
                                       accept="image/*" 
+                                      multiple
                                       capture="environment"
                                       className="hidden" 
                                       onChange={(e) => handlePhotoUpload(item.id, e)} 
@@ -1767,6 +1795,7 @@ export default function App() {
                                     <input 
                                       type="file" 
                                       accept="image/*" 
+                                      multiple
                                       className="hidden" 
                                       onChange={(e) => handlePhotoUpload(item.id, e)} 
                                     />

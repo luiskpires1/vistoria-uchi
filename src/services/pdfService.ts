@@ -122,6 +122,20 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.text(`Status: ${data.status === 'completed' ? 'FINALIZADA' : 'EM RASCUNHO'}`, 25, currentY);
   currentY += 15; // Standardized spacing between sections
 
+  // Property Description Section (Moved to first page)
+  if (data.propertyDescription) {
+    if (currentY > 240) { doc.addPage(); currentY = 25; }
+    drawSectionHeader('DESCRIÇÃO DO IMÓVEL', currentY);
+    currentY += 10; // Spacing after header
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(50, 50, 50);
+    doc.setFontSize(11); // Increased font size
+    const splitPropDesc = doc.splitTextToSize(data.propertyDescription, pageWidth - 50);
+    doc.text(splitPropDesc, 25, currentY);
+    currentY += (splitPropDesc.length * 5) + 15;
+  }
+
   // Parties Info
   if (currentY > 260) { doc.addPage(); currentY = 25; }
   drawSectionHeader('PARTES ENVOLVIDAS', currentY);
@@ -169,21 +183,6 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.text('Regular: Com avarias.', 25, currentY + 10);
   doc.text('Ruim: Com danos graves/relevantes.', 25, currentY + 15);
   currentY += 30; // Set currentY to 15pt below the last line of this section
-
-  // Property Description Section
-  if (data.propertyDescription) {
-    currentY += 15; // Standard 15pt gap between sections
-    if (currentY > 240) { doc.addPage(); currentY = 25; }
-    drawSectionHeader('DESCRIÇÃO DO IMÓVEL', currentY);
-    currentY += 10; // Spacing after header
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(50, 50, 50);
-    doc.setFontSize(11); // Increased font size
-    const splitPropDesc = doc.splitTextToSize(data.propertyDescription, pageWidth - 50);
-    doc.text(splitPropDesc, 25, currentY);
-    currentY += (splitPropDesc.length * 5) + 15;
-  }
 
   // Rooms and Items
   for (const room of data.rooms) {
@@ -274,7 +273,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
       const tableData = room.items.map(item => [
         item.name,
         item.condition.toUpperCase(),
-        item.description || 'Sem observações',
+        item.description || '',
         item.hasFurniture ? (item.furnitureDescription || 'Sim') : 'Não'
       ]);
 
@@ -310,13 +309,16 @@ export const generateInspectionPDF = async (data: InspectionData) => {
           currentY += 7;
 
           // Observations (Description)
-          doc.setFontSize(11); // Increased font size
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(80, 80, 80);
-          const obsText = item.description || 'Sem observações';
-          const splitObs = doc.splitTextToSize(`Observações: ${obsText}`, pageWidth - 40);
-          doc.text(splitObs, 20, currentY);
-          currentY += (splitObs.length * 5) + 2;
+          if (item.description) {
+            doc.setFontSize(11); // Increased font size
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(80, 80, 80);
+            const splitObs = doc.splitTextToSize(`Observações: ${item.description}`, pageWidth - 40);
+            doc.text(splitObs, 20, currentY);
+            currentY += (splitObs.length * 5) + 2;
+          } else {
+            currentY += 2;
+          }
 
           // Damage Description
           if (item.hasFurniture && item.furnitureDescription) {
@@ -425,42 +427,59 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   const startX = (pageWidth - totalWidth) / 2;
 
   doc.setFontSize(10); // Increased font size for signature labels and names
-  // Row 1: Vistoriador and Owner/Buyer
-  // Vistoriador
-  doc.setDrawColor(150, 150, 150);
-  doc.line(startX, currentY, startX + sigWidth, currentY);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Vistoriador', startX + sigWidth / 2, currentY + 5, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.text(data.inspector.name, startX + sigWidth / 2, currentY + 10, { align: 'center' });
-  doc.text(`CPF: ${data.inspector.cpf}`, startX + sigWidth / 2, currentY + 14, { align: 'center' });
+  
+  // Collect all people who need to sign
+  const signers = [
+    { label: 'Vistoriador', person: data.inspector }
+  ];
 
-  // Owner/Buyer
-  const secondLabel = data.type === 'venda' ? 'Comprador' : 'Proprietário';
-  const secondPerson = data.type === 'venda' ? data.buyer : data.owner;
-  if (secondPerson && secondPerson.name) {
-    const x = startX + sigWidth + sigSpacing;
-    doc.line(x, currentY, x + sigWidth, currentY);
-    doc.setFont('helvetica', 'bold');
-    doc.text(secondLabel, x + sigWidth / 2, currentY + 5, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.text(secondPerson.name, x + sigWidth / 2, currentY + 10, { align: 'center' });
-    doc.text(`CPF: ${secondPerson.cpf}`, x + sigWidth / 2, currentY + 14, { align: 'center' });
+  if (data.type === 'venda') {
+    if (data.seller && data.seller.name) signers.push({ label: 'Vendedor', person: data.seller });
+    if (data.buyer && data.buyer.name) signers.push({ label: 'Comprador', person: data.buyer });
+  } else {
+    if (data.owner && data.owner.name) signers.push({ label: 'Proprietário', person: data.owner });
+    if (data.tenant && data.tenant.name) signers.push({ label: 'Inquilino', person: data.tenant });
   }
 
-  currentY += 35;
+  // Draw signers in rows of 2
+  for (let i = 0; i < signers.length; i++) {
+    const signer = signers[i];
+    const isEven = i % 2 === 0;
+    const row = Math.floor(i / 2);
+    
+    // Check for page break before starting a new row
+    if (isEven && currentY + 40 > 280) {
+      doc.addPage();
+      currentY = 30;
+    }
 
-  // Row 2: Tenant/Seller
-  const thirdLabel = data.type === 'venda' ? 'Vendedor' : 'Inquilino';
-  const thirdPerson = data.type === 'venda' ? data.seller : data.tenant;
-  if (thirdPerson && thirdPerson.name) {
-    const x = (pageWidth - sigWidth) / 2;
-    doc.line(x, currentY, x + sigWidth, currentY);
+    const x = isEven ? startX : startX + sigWidth + sigSpacing;
+    const y = currentY + (row * 35); // This y is for the line
+
+    // If it's the last signer and it's an odd index (centered)
+    let finalX = x;
+    if (!isEven && i === signers.length - 1) {
+      // Already handled by the grid logic, but if we wanted to center the last one if it's alone:
+      // But here we have 3 signers usually, so 0, 1 in row 0, and 2 in row 1.
+    }
+    
+    // If it's the 3rd signer (index 2), center it
+    if (i === 2 && signers.length === 3) {
+      finalX = (pageWidth - sigWidth) / 2;
+    }
+
+    const lineY = currentY;
+    doc.setDrawColor(150, 150, 150);
+    doc.line(finalX, lineY, finalX + sigWidth, lineY);
     doc.setFont('helvetica', 'bold');
-    doc.text(thirdLabel, x + sigWidth / 2, currentY + 5, { align: 'center' });
+    doc.text(signer.label, finalX + sigWidth / 2, lineY + 5, { align: 'center' });
     doc.setFont('helvetica', 'normal');
-    doc.text(thirdPerson.name, x + sigWidth / 2, currentY + 10, { align: 'center' });
-    doc.text(`CPF: ${thirdPerson.cpf}`, x + sigWidth / 2, currentY + 14, { align: 'center' });
+    doc.text(signer.person.name, finalX + sigWidth / 2, lineY + 10, { align: 'center' });
+    doc.text(`CPF: ${signer.person.cpf}`, finalX + sigWidth / 2, lineY + 14, { align: 'center' });
+
+    if (!isEven || i === signers.length - 1) {
+      currentY += 35;
+    }
   }
 
   // Footer on each page
