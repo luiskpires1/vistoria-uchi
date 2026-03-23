@@ -154,7 +154,7 @@ const STANDARD_USER = {
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('uchi_logged_in') === 'true');
   const [user] = useState<any>(STANDARD_USER);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState('Iniciando...');
   const [inspections, setInspections] = useState<Inspection[]>([]);
@@ -283,20 +283,8 @@ export default function App() {
 
   // Auth removed as per user request
   useEffect(() => {
-    // Simulate initial loading progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        setTimeout(() => setLoading(false), 500);
-      }
-      setLoadingProgress(progress);
-      setLoadingMessage(progress < 50 ? 'Carregando configurações...' : 'Preparando ambiente...');
-    }, 100);
-
-    return () => clearInterval(interval);
+    // Initial data fetching is handled by onSnapshot, which is real-time.
+    // No need for a fake simulation that might appear after the app has already loaded.
   }, []);
 
   // Fetch Inspections
@@ -599,7 +587,7 @@ export default function App() {
       setLoadingProgress(100);
       setLoadingMessage('Vistoria duplicada com sucesso!');
       showToast('Vistoria duplicada com sucesso!', 'success');
-      setTimeout(() => setLoading(false), 500);
+      setLoading(false);
     } catch (error) {
       console.error('Error duplicating inspection:', error);
       showToast('Erro ao duplicar vistoria', 'error');
@@ -1021,7 +1009,7 @@ export default function App() {
       setLoadingProgress(100);
       setLoadingMessage('Relatório concluído!');
       showToast('Relatório gerado com sucesso!', 'success');
-      setTimeout(() => setLoading(false), 500);
+      setLoading(false);
     } catch (error) {
       console.error('Error generating report:', error);
       showToast('Erro ao gerar relatório', 'error');
@@ -1044,20 +1032,20 @@ export default function App() {
     return <Login onLogin={() => setIsLoggedIn(true)} />;
   }
 
-  if (loading) {
-    return (
-      <LoadingScreen 
-        progress={loadingProgress} 
-        message={loadingMessage} 
-        logoUrl={LOGO_URL} 
-      />
-    );
-  }
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-zinc-50 text-brand-blue font-sans pb-32">
-      {/* Header */}
+        <AnimatePresence>
+          {loading && (
+            <LoadingScreen 
+              progress={loadingProgress} 
+              message={loadingMessage} 
+              logoUrl={LOGO_URL} 
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-200 bg-white">

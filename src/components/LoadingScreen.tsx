@@ -17,7 +17,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm"
+    >
       <div className="relative w-48 h-48 flex items-center justify-center">
         {/* Progress Circle */}
         <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
@@ -79,6 +84,6 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
           {message}
         </motion.p>
       </div>
-    </div>
+    </motion.div>
   );
 };
