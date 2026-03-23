@@ -50,7 +50,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   
   // Spacing constants
   const LINE_HEIGHT = 6;
-  const SECTION_GAP = 15;
+  const SECTION_GAP = 20;
   const HEADER_HEIGHT = 35;
   const FOOTER_SPACE = 25;
   const MAX_Y = pageHeight - FOOTER_SPACE;
@@ -109,14 +109,14 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     doc.setTextColor(0, 58, 90);
     doc.setFont('helvetica', 'bold');
     doc.text(title, margin + 5, newY - 1);
-    return newY + 5;
+    return newY + 10;
   };
 
   // Property Info
   doc.setDrawColor(230, 230, 230);
   doc.line(margin, 62, pageWidth - margin, 62);
   
-  let currentY = 75;
+  let currentY = 85;
   currentY = drawSectionHeader('DADOS DO IMÓVEL', currentY);
   
   doc.setFontSize(11);
