@@ -279,7 +279,6 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
       for (const photo of room.photos) {
         try {
-          const props = doc.getImageProperties(photo);
           // Force landscape aspect ratio (4:3)
           const targetAspectRatio = 4 / 3;
           const h = photoWidth / targetAspectRatio;
@@ -287,7 +286,12 @@ export const generateInspectionPDF = async (data: InspectionData) => {
           currentY = checkPageBreak(h + 10, currentY);
           if (currentY === margin + 5) photoX = margin;
 
-          doc.addImage(photo, 'JPEG', photoX, currentY, photoWidth, h);
+          // Detect format from data URI
+          let format = 'JPEG';
+          if (photo.startsWith('data:image/png')) format = 'PNG';
+          if (photo.startsWith('data:image/webp')) format = 'WEBP';
+
+          doc.addImage(photo, format, photoX, currentY, photoWidth, h);
           maxRowHeight = Math.max(maxRowHeight, h);
           
           if (photoX > margin) {
@@ -373,7 +377,6 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
           for (const photo of item.photos) {
             try {
-              const props = doc.getImageProperties(photo);
               // Force landscape aspect ratio (4:3)
               const targetAspectRatio = 4 / 3;
               const h = photoWidth / targetAspectRatio;
@@ -381,7 +384,12 @@ export const generateInspectionPDF = async (data: InspectionData) => {
               currentY = checkPageBreak(h + 10, currentY);
               if (currentY === margin + 5) photoX = margin;
 
-              doc.addImage(photo, 'JPEG', photoX, currentY, photoWidth, h);
+              // Detect format from data URI
+              let format = 'JPEG';
+              if (photo.startsWith('data:image/png')) format = 'PNG';
+              if (photo.startsWith('data:image/webp')) format = 'WEBP';
+
+              doc.addImage(photo, format, photoX, currentY, photoWidth, h);
               maxRowHeight = Math.max(maxRowHeight, h);
               
               if (photoX > margin) {
