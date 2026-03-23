@@ -1823,7 +1823,7 @@ export default function App() {
       </main>
 
       {/* Footer / Mobile Nav */}
-      {view === 'edit' && localInspection && (
+      {view === 'edit' && localInspection && !isEditingProperty && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-zinc-200 flex justify-center z-[100]">
           <Button 
             className="w-full max-w-md py-4 shadow-xl shadow-black/10" 
