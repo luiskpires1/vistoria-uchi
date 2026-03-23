@@ -162,13 +162,14 @@ export default function App() {
   const [currentInspection, setCurrentInspection] = useState<Inspection | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [isEditingProperty, setIsEditingProperty] = useState(false);
   const [localInspection, setLocalInspection] = useState<Inspection | null>(null);
   const [localRooms, setLocalRooms] = useState<Room[]>([]);
   const [localItems, setLocalItems] = useState<{ [roomId: string]: Item[] }>({});
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const selectedRoom = useMemo(() => localRooms.find(r => r.id === selectedRoomId) || null, [localRooms, selectedRoomId]);
   const [deletedRoomIds, setDeletedRoomIds] = useState<string[]>([]);
   const [deletedItemIds, setDeletedItemIds] = useState<{ [roomId: string]: string[] }>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -489,7 +490,7 @@ export default function App() {
       showToast('Vistoria salva com sucesso!', 'success');
       setView('dashboard');
       setCurrentInspection(null);
-      setSelectedRoom(null);
+      setSelectedRoomId(null);
     } catch (error) {
       console.error('Error saving inspection:', error);
       showToast('Erro ao salvar vistoria', 'error');
@@ -511,7 +512,7 @@ export default function App() {
           if (currentInspection?.id === id) {
             setView('dashboard');
             setCurrentInspection(null);
-            setSelectedRoom(null);
+            setSelectedRoomId(null);
           }
           showToast('Vistoria excluída com sucesso!', 'success');
         } catch (error) {
@@ -685,89 +686,99 @@ export default function App() {
     if (!roomId.startsWith('temp-')) {
       setDeletedRoomIds(prev => [...prev, roomId]);
     }
-    if (selectedRoom?.id === roomId) {
-      setSelectedRoom(null);
+    if (selectedRoomId === roomId) {
+      setSelectedRoomId(null);
     }
     setHasUnsavedChanges(true);
-  }, [localInspection, localRooms, selectedRoom]);
+  }, [localInspection, localRooms, selectedRoomId]);
 
   const moveRoom = useCallback((index: number, direction: 'up' | 'down') => {
     const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= localRooms.length) return;
-
-    const newRooms = [...localRooms];
-    const [movedRoom] = newRooms.splice(index, 1);
-    newRooms.splice(newIndex, 0, movedRoom);
-    
-    setLocalRooms(newRooms.map((r, i) => ({ ...r, order: i })));
+    setLocalRooms(prev => {
+      if (newIndex < 0 || newIndex >= prev.length) return prev;
+      const newRooms = [...prev];
+      const [movedRoom] = newRooms.splice(index, 1);
+      newRooms.splice(newIndex, 0, movedRoom);
+      return newRooms.map((r, i) => ({ ...r, order: i }));
+    });
     setHasUnsavedChanges(true);
-  }, [localRooms]);
+  }, []);
 
   const updateRoom = useCallback((roomId: string) => {
-    if (!localInspection || !editingRoomName.trim()) return;
-    setLocalRooms(localRooms.map(r => r.id === roomId ? { ...r, name: editingRoomName.trim() } : r));
+    if (!editingRoomName.trim()) return;
+    setLocalRooms(prev => prev.map(r => r.id === roomId ? { ...r, name: editingRoomName.trim() } : r));
     setEditingRoomId(null);
     setEditingRoomName('');
     setHasUnsavedChanges(true);
-  }, [localInspection, editingRoomName, localRooms]);
+  }, [editingRoomName]);
 
   const updatePropertyDescription = useCallback((description: string) => {
-    if (!localInspection) return;
-    setLocalInspection({ ...localInspection, propertyDescription: description });
+    setLocalInspection(prev => prev ? { ...prev, propertyDescription: description } : null);
     setHasUnsavedChanges(true);
-  }, [localInspection]);
+  }, []);
 
   const updateInspectorOpinion = useCallback((opinion: string) => {
-    if (!localInspection) return;
-    setLocalInspection({ ...localInspection, inspectorOpinion: opinion });
+    setLocalInspection(prev => prev ? { ...prev, inspectorOpinion: opinion } : null);
     setHasUnsavedChanges(true);
-  }, [localInspection]);
+  }, []);
 
   const updateRoomDetails = useCallback((roomId: string, updates: Partial<Room>) => {
-    setLocalRooms(localRooms.map(r => r.id === roomId ? { ...r, ...updates } : r));
+    setLocalRooms(prev => prev.map(r => r.id === roomId ? { ...r, ...updates } : r));
     setHasUnsavedChanges(true);
-  }, [localRooms]);
+  }, []);
 
   const handleRoomPhotoUpload = useCallback(async (roomId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const room = localRooms.find(r => r.id === roomId);
-    const currentPhotos = room?.photos || [];
-    
-    if (currentPhotos.length + files.length > 10) {
-      showToast('Limite de 10 fotos por ambiente atingido.', 'error');
-      // We'll still process up to the limit if possible, or just return
-      if (currentPhotos.length >= 10) return;
+    setLoading(true);
+    setLoadingMessage('Processando fotos...');
+    try {
+      const room = localRooms.find(r => r.id === roomId);
+      const currentPhotos = room?.photos || [];
+      
+      if (currentPhotos.length + files.length > 10) {
+        showToast('Limite de 10 fotos por ambiente atingido.', 'error');
+        if (currentPhotos.length >= 10) return;
+      }
+
+      const newPhotos: string[] = [...currentPhotos];
+      const filesToProcess = Array.from(files).slice(0, 10 - currentPhotos.length) as File[];
+
+      for (const file of filesToProcess) {
+        const reader = new FileReader();
+        const promise = new Promise<string>((resolve) => {
+          reader.onloadend = async () => {
+            const base64String = reader.result as string;
+            const compressedBase64 = await compressImage(base64String);
+            resolve(compressedBase64);
+          };
+        });
+        reader.readAsDataURL(file);
+        const compressed = await promise;
+        newPhotos.push(compressed);
+      }
+
+      updateRoomDetails(roomId, { photos: newPhotos });
+    } catch (error) {
+      console.error('Error uploading room photo:', error);
+      showToast('Erro ao processar fotos', 'error');
+    } finally {
+      setLoading(false);
     }
-
-    const newPhotos: string[] = [...currentPhotos];
-    const filesToProcess = Array.from(files).slice(0, 10 - currentPhotos.length) as File[];
-
-    for (const file of filesToProcess) {
-      const reader = new FileReader();
-      const promise = new Promise<string>((resolve) => {
-        reader.onloadend = async () => {
-          const base64String = reader.result as string;
-          const compressedBase64 = await compressImage(base64String);
-          resolve(compressedBase64);
-        };
-      });
-      reader.readAsDataURL(file);
-      const compressed = await promise;
-      newPhotos.push(compressed);
-    }
-
-    updateRoomDetails(roomId, { photos: newPhotos });
   }, [localRooms, showToast, updateRoomDetails]);
 
   const removeRoomPhoto = useCallback((roomId: string, photoIndex: number) => {
-    const room = localRooms.find(r => r.id === roomId);
-    if (!room || !room.photos) return;
-    const newPhotos = [...room.photos];
-    newPhotos.splice(photoIndex, 1);
-    updateRoomDetails(roomId, { photos: newPhotos });
-  }, [localRooms, updateRoomDetails]);
+    setLocalRooms(prev => prev.map(r => {
+      if (r.id === roomId && r.photos) {
+        const newPhotos = [...r.photos];
+        newPhotos.splice(photoIndex, 1);
+        return { ...r, photos: newPhotos };
+      }
+      return r;
+    }));
+    setHasUnsavedChanges(true);
+  }, []);
 
   const addItem = useCallback(() => {
     if (!localInspection || !selectedRoom || !newItemName.trim()) return;
@@ -839,33 +850,42 @@ export default function App() {
     const files = e.target.files;
     if (!files || files.length === 0 || !selectedRoom) return;
 
-    const roomItems = localItems[selectedRoom.id] || [];
-    const item = roomItems.find(i => i.id === itemId);
-    const currentPhotos = item?.photos || [];
-    
-    if (currentPhotos.length + files.length > 10) {
-      showToast('Limite de 10 fotos por item atingido.', 'error');
-      if (currentPhotos.length >= 10) return;
+    setLoading(true);
+    setLoadingMessage('Processando fotos...');
+    try {
+      const roomItems = localItems[selectedRoom.id] || [];
+      const item = roomItems.find(i => i.id === itemId);
+      const currentPhotos = item?.photos || [];
+      
+      if (currentPhotos.length + files.length > 10) {
+        showToast('Limite de 10 fotos por item atingido.', 'error');
+        if (currentPhotos.length >= 10) return;
+      }
+
+      const newPhotos: string[] = [...currentPhotos];
+      const filesToProcess = Array.from(files).slice(0, 10 - currentPhotos.length) as File[];
+
+      for (const file of filesToProcess) {
+        const reader = new FileReader();
+        const promise = new Promise<string>((resolve) => {
+          reader.onloadend = async () => {
+            const base64String = reader.result as string;
+            const compressedBase64 = await compressImage(base64String);
+            resolve(compressedBase64);
+          };
+        });
+        reader.readAsDataURL(file);
+        const compressed = await promise;
+        newPhotos.push(compressed);
+      }
+
+      updateItem(itemId, { photos: newPhotos });
+    } catch (error) {
+      console.error('Error uploading item photo:', error);
+      showToast('Erro ao processar fotos', 'error');
+    } finally {
+      setLoading(false);
     }
-
-    const newPhotos: string[] = [...currentPhotos];
-    const filesToProcess = Array.from(files).slice(0, 10 - currentPhotos.length) as File[];
-
-    for (const file of filesToProcess) {
-      const reader = new FileReader();
-      const promise = new Promise<string>((resolve) => {
-        reader.onloadend = async () => {
-          const base64String = reader.result as string;
-          const compressedBase64 = await compressImage(base64String);
-          resolve(compressedBase64);
-        };
-      });
-      reader.readAsDataURL(file);
-      const compressed = await promise;
-      newPhotos.push(compressed);
-    }
-
-    updateItem(itemId, { photos: newPhotos });
   }, [selectedRoom, localItems, showToast, updateItem]);
 
   const handleEditInspection = useCallback(async (ins: Inspection) => {
@@ -924,7 +944,7 @@ export default function App() {
           setLocalInspection(null);
           setLocalRooms([]);
           setLocalItems({});
-          setSelectedRoom(null);
+          setSelectedRoomId(null);
           setHasUnsavedChanges(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         }
@@ -934,7 +954,7 @@ export default function App() {
       setLocalInspection(null);
       setLocalRooms([]);
       setLocalItems({});
-      setSelectedRoom(null);
+      setSelectedRoomId(null);
     }
   }, [hasUnsavedChanges]);
 
@@ -1019,14 +1039,21 @@ export default function App() {
 
   const removePhoto = useCallback((itemId: string, photoIndex: number) => {
     if (!selectedRoom) return;
-    const roomItems = localItems[selectedRoom.id] || [];
-    const item = roomItems.find(i => i.id === itemId);
-    if (!item || !item.photos) return;
-    
-    const newPhotos = [...item.photos];
-    newPhotos.splice(photoIndex, 1);
-    updateItem(itemId, { photos: newPhotos });
-  }, [selectedRoom, localItems, updateItem]);
+    const roomId = selectedRoom.id;
+    setLocalItems(prev => {
+      const roomItems = prev[roomId] || [];
+      const newItems = roomItems.map(item => {
+        if (item.id === itemId) {
+          const newPhotos = [...item.photos];
+          newPhotos.splice(photoIndex, 1);
+          return { ...item, photos: newPhotos };
+        }
+        return item;
+      });
+      return { ...prev, [roomId]: newItems };
+    });
+    setHasUnsavedChanges(true);
+  }, [selectedRoom]);
 
   if (!isLoggedIn) {
     return <Login onLogin={() => setIsLoggedIn(true)} />;
@@ -1142,7 +1169,7 @@ export default function App() {
               onSetEditingRoomName={setEditingRoomName}
               onDeleteRoom={deleteRoom}
               onMoveRoom={moveRoom}
-              onSelectRoom={setSelectedRoom}
+              onSelectRoom={(room) => setSelectedRoomId(room?.id || null)}
               onUpdateRoomDetails={updateRoomDetails}
               onRemoveRoomPhoto={removeRoomPhoto}
               onRoomPhotoUpload={handleRoomPhotoUpload}
