@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   Plus, 
   Camera, 
@@ -25,7 +25,9 @@ import {
   Download,
   ChevronUp,
   ChevronDown,
-  Copy
+  Copy,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react';
 import { generateInspectionPDF } from './services/pdfService';
 import { 
@@ -42,7 +44,10 @@ import {
   updateDoc, 
   deleteDoc, 
   orderBy, 
-  getDocs
+  getDocs,
+  where,
+  writeBatch,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { 
@@ -53,6 +58,20 @@ import {
   ItemCondition, 
   InspectionStatus 
 } from './types';
+import { 
+  Button, 
+  Card, 
+  Badge, 
+  Modal, 
+  Toast, 
+  Input, 
+  Select,
+  ErrorBoundary 
+} from './components/UI';
+import Login from './components/Login';
+import Dashboard from './components/Dashboard';
+import NewInspection from './components/NewInspection';
+import InspectionEdit from './components/InspectionEdit';
 
 // --- Error Handling ---
 
@@ -117,224 +136,10 @@ const formatCEP = (value: string) => {
     .replace(/(-\d{3})\d+?$/, '$1');
 };
 
-class ErrorBoundary extends (React.Component as any) {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: any) {
-    return { hasError: true, error };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      let message = "Ocorreu um erro inesperado.";
-      try {
-        const parsed = JSON.parse(this.state.error.message);
-        if (parsed.error.includes('insufficient permissions')) {
-          message = "Você não tem permissão para realizar esta ação. Verifique se você é o proprietário desta vistoria.";
-        }
-      } catch (e) {
-        // Not a JSON error
-      }
-
-      return (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-zinc-50 text-center">
-          <Card className="p-8 max-w-md">
-            <X className="mx-auto text-red-500 mb-4" size={48} />
-            <h2 className="text-xl font-bold mb-2">Ops! Algo deu errado</h2>
-            <p className="text-zinc-500 mb-6">{message}</p>
-            <Button onClick={() => window.location.reload()} className="w-full">Recarregar Aplicativo</Button>
-          </Card>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-// --- Components ---
-
-const Button = ({ children, onClick, variant = 'primary', className = '', disabled = false, icon: Icon }: any) => {
-  const variants: any = {
-    primary: 'bg-brand-blue text-white hover:bg-brand-blue/90',
-    secondary: 'bg-white text-brand-blue border border-zinc-200 hover:bg-zinc-50',
-    danger: 'bg-red-500 text-white hover:bg-red-600',
-    ghost: 'bg-transparent text-zinc-600 hover:bg-zinc-100',
-  };
-
-  return (
-    <button 
-      onClick={onClick} 
-      disabled={disabled}
-      className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none ${variants[variant]} ${className}`}
-    >
-      {Icon && <Icon size={18} />}
-      {children}
-    </button>
-  );
-};
-
-const Card = ({ children, className = '' }: any) => (
-  <div className={`bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden ${className}`}>
-    {children}
-  </div>
-);
-
-const Badge = ({ children, variant = 'neutral' }: any) => {
-  const variants: any = {
-    neutral: 'bg-zinc-100 text-zinc-600',
-    success: 'bg-emerald-100 text-emerald-700',
-    warning: 'bg-amber-100 text-amber-700',
-    info: 'bg-blue-100 text-blue-700',
-    danger: 'bg-red-100 text-red-700',
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${variants[variant]}`}>
-      {children}
-    </span>
-  );
-};
-
-const Modal = ({ isOpen, onClose, title, children, footer }: any) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto">
-      <motion.div 
-        initial={{ scale: 0.9, opacity: 0, y: 20 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md my-auto flex flex-col"
-      >
-        <div className="p-6 border-b border-zinc-100 flex items-center justify-between flex-shrink-0">
-          <h3 className="text-xl font-bold text-zinc-900">{title}</h3>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="p-6 overflow-y-visible">
-          {children}
-        </div>
-        {footer && (
-          <div className="p-6 bg-zinc-50 border-t border-zinc-100 flex justify-end gap-3 flex-shrink-0">
-            {footer}
-          </div>
-        )}
-      </motion.div>
-    </div>
-  );
-};
-
-const Toast = ({ isOpen, message, type = 'info' }: any) => {
-  if (!isOpen) return null;
-  const colors: any = {
-    success: 'bg-emerald-500',
-    error: 'bg-red-500',
-    info: 'bg-brand-blue'
-  };
-  return (
-    <motion.div 
-      initial={{ y: 50, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: 50, opacity: 0 }}
-      className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl text-white font-medium shadow-xl flex items-center gap-3 ${colors[type]}`}
-    >
-      {type === 'success' && <CheckCircle2 size={20} />}
-      {type === 'error' && <X size={20} />}
-      {type === 'info' && <Info size={20} />}
-      {message}
-    </motion.div>
-  );
-};
-
 // --- Constants ---
 
-const LOGO_URL = '/logo.png';
-
-const Login = ({ onLogin }: { onLogin: () => void }) => {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === 'Uchi03++') {
-      localStorage.setItem('uchi_logged_in', 'true');
-      onLogin();
-    } else {
-      setError('Senha incorreta. Tente novamente.');
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-zinc-100"
-      >
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-32 h-32 rounded-full overflow-hidden mb-4 shadow-lg border border-zinc-100 bg-white">
-            <img 
-              src={LOGO_URL} 
-              alt="Uchi Vistorias Logo" 
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                // Fallback to home icon if image fails
-                (e.target as any).style.display = 'none';
-                (e.target as any).parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-brand-blue/10"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#003a5a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>';
-              }}
-            />
-          </div>
-          <h1 className="text-2xl font-bold text-zinc-900">Uchi Imóveis</h1>
-          <p className="text-zinc-500 text-sm">Acesse o sistema de vistorias</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-zinc-700">Usuário</label>
-            <input 
-              type="text" 
-              value="Uchi Imóveis" 
-              disabled 
-              className="w-full px-4 py-3 rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-500 outline-none cursor-not-allowed"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-zinc-700">Senha</label>
-            <input 
-              type="password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Digite sua senha"
-              required
-              className="w-full px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all"
-            />
-          </div>
-
-          {error && (
-            <motion.p 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-red-500 text-xs font-medium"
-            >
-              {error}
-            </motion.p>
-          )}
-
-          <button 
-            type="submit"
-            className="w-full bg-brand-blue text-white py-3 rounded-xl font-bold hover:bg-brand-blue/90 transition-all shadow-lg shadow-brand-blue/20 flex items-center justify-center gap-2"
-          >
-            Entrar
-            <ChevronRight size={18} />
-          </button>
-        </form>
-      </motion.div>
-    </div>
-  );
-};
+const LOGO_URL = "https://ais-pre-rwp7gfhhrnm5kvzj7mq5rl-136253274741.us-east1.run.app/logo.png";
+const DEFAULT_USER = { displayName: 'Uchi Imóveis', email: 'contato@uchiimoveis.com.br' };
 
 // --- Main App ---
 
@@ -397,15 +202,15 @@ export default function App() {
     type: 'info'
   });
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ isOpen: true, message, type });
     setTimeout(() => setToast(prev => ({ ...prev, isOpen: false })), 3000);
-  };
+  }, []);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('uchi_logged_in');
     setIsLoggedIn(false);
-  };
+  }, []);
   const [isMoving, setIsMoving] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newItemName, setNewItemName] = useState('');
@@ -528,7 +333,7 @@ export default function App() {
     }
   }, [inspections]);
 
-  const createInspection = async (e: React.FormEvent<HTMLFormElement>) => {
+  const createInspection = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const address = formData.get('address') as string;
@@ -621,9 +426,9 @@ export default function App() {
     } finally {
       setIsCreating(false);
     }
-  };
+  }, [user, showToast]);
 
-  const saveInspection = async () => {
+  const saveInspection = useCallback(async () => {
     if (!localInspection) return;
     setIsSaving(true);
     try {
@@ -686,9 +491,9 @@ export default function App() {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [localInspection, localRooms, localItems, deletedRoomIds, deletedItemIds, showToast]);
 
-  const deleteInspection = (id: string) => {
+  const deleteInspection = useCallback((id: string) => {
     setConfirmModal({
       isOpen: true,
       title: 'Excluir Vistoria',
@@ -710,9 +515,9 @@ export default function App() {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
-  };
+  }, [currentInspection, showToast]);
 
-  const duplicateInspection = async (ins: Inspection) => {
+  const duplicateInspection = useCallback(async (ins: Inspection) => {
     setLoading(true);
     try {
       // 1. Fetch all rooms for the source inspection
@@ -765,9 +570,9 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
 
-  const handleUpdateProperty = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleUpdateProperty = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!localInspection) return;
 
@@ -819,9 +624,9 @@ export default function App() {
     setIsEditingProperty(false);
     setHasUnsavedChanges(true);
     showToast('Dados atualizados localmente. Clique em Salvar para persistir.', 'info');
-  };
+  }, [localInspection, showToast]);
 
-  const addRoom = () => {
+  const addRoom = useCallback(() => {
     if (!localInspection || !newRoomName.trim()) return;
 
     const newRoom: Room = {
@@ -849,9 +654,9 @@ export default function App() {
     setNewRoomName('');
     setIsAddingRoom(false);
     setHasUnsavedChanges(true);
-  };
+  }, [localInspection, newRoomName, localRooms]);
 
-  const deleteRoom = (roomId: string) => {
+  const deleteRoom = useCallback((roomId: string) => {
     if (!localInspection) return;
     setLocalRooms(localRooms.filter(r => r.id !== roomId));
     if (!roomId.startsWith('temp-')) {
@@ -861,9 +666,9 @@ export default function App() {
       setSelectedRoom(null);
     }
     setHasUnsavedChanges(true);
-  };
+  }, [localInspection, localRooms, selectedRoom]);
 
-  const moveRoom = (index: number, direction: 'up' | 'down') => {
+  const moveRoom = useCallback((index: number, direction: 'up' | 'down') => {
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= localRooms.length) return;
 
@@ -873,84 +678,34 @@ export default function App() {
     
     setLocalRooms(newRooms.map((r, i) => ({ ...r, order: i })));
     setHasUnsavedChanges(true);
-  };
+  }, [localRooms]);
 
-  const generateReport = async (inspection: Inspection) => {
-    try {
-      // Fetch all rooms for this inspection
-      const roomsQuery = query(collection(db, `inspections/${inspection.id}/rooms`), orderBy('order'));
-      const roomsSnapshot = await getDocs(roomsQuery);
-      
-      const roomsData = await Promise.all(roomsSnapshot.docs.map(async (roomDoc) => {
-        const room = roomDoc.data();
-        // Fetch all items for this room
-        const itemsQuery = query(collection(db, `inspections/${inspection.id}/rooms/${roomDoc.id}/items`), orderBy('order'));
-        const itemsSnapshot = await getDocs(itemsQuery);
-        
-        return {
-          name: room.name,
-          description: room.description,
-          photos: room.photos || [],
-          items: itemsSnapshot.docs.map(itemDoc => {
-            const item = itemDoc.data();
-            return {
-              name: item.name,
-              condition: item.condition,
-              description: item.description,
-              hasFurniture: item.hasFurniture,
-              furnitureDescription: item.furnitureDescription,
-              photos: item.photos || []
-            };
-          })
-        };
-      }));
-
-      await generateInspectionPDF({
-        property: inspection.property || { address: inspection.address, neighborhood: '', city: '', cep: '' },
-        type: inspection.type,
-        date: inspection.date,
-        propertyDescription: inspection.propertyDescription,
-        inspectorOpinion: inspection.inspectorOpinion,
-        status: inspection.status,
-        inspector: inspection.inspector || { name: '', cpf: '' },
-        owner: inspection.owner,
-        tenant: inspection.tenant,
-        buyer: inspection.buyer,
-        seller: inspection.seller,
-        rooms: roomsData
-      });
-    } catch (error) {
-      console.error('Error generating report:', error);
-      showToast('Erro ao gerar o laudo em PDF. Tente novamente.', 'error');
-    }
-  };
-
-  const updateRoom = (roomId: string) => {
+  const updateRoom = useCallback((roomId: string) => {
     if (!localInspection || !editingRoomName.trim()) return;
     setLocalRooms(localRooms.map(r => r.id === roomId ? { ...r, name: editingRoomName.trim() } : r));
     setEditingRoomId(null);
     setEditingRoomName('');
     setHasUnsavedChanges(true);
-  };
+  }, [localInspection, editingRoomName, localRooms]);
 
-  const updatePropertyDescription = (description: string) => {
+  const updatePropertyDescription = useCallback((description: string) => {
     if (!localInspection) return;
     setLocalInspection({ ...localInspection, propertyDescription: description });
     setHasUnsavedChanges(true);
-  };
+  }, [localInspection]);
 
-  const updateInspectorOpinion = (opinion: string) => {
+  const updateInspectorOpinion = useCallback((opinion: string) => {
     if (!localInspection) return;
     setLocalInspection({ ...localInspection, inspectorOpinion: opinion });
     setHasUnsavedChanges(true);
-  };
+  }, [localInspection]);
 
-  const updateRoomDetails = (roomId: string, updates: Partial<Room>) => {
+  const updateRoomDetails = useCallback((roomId: string, updates: Partial<Room>) => {
     setLocalRooms(localRooms.map(r => r.id === roomId ? { ...r, ...updates } : r));
     setHasUnsavedChanges(true);
-  };
+  }, [localRooms]);
 
-  const handleRoomPhotoUpload = async (roomId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRoomPhotoUpload = useCallback(async (roomId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -981,17 +736,17 @@ export default function App() {
     }
 
     updateRoomDetails(roomId, { photos: newPhotos });
-  };
+  }, [localRooms, showToast, updateRoomDetails]);
 
-  const removeRoomPhoto = (roomId: string, photoIndex: number) => {
+  const removeRoomPhoto = useCallback((roomId: string, photoIndex: number) => {
     const room = localRooms.find(r => r.id === roomId);
     if (!room || !room.photos) return;
     const newPhotos = [...room.photos];
     newPhotos.splice(photoIndex, 1);
     updateRoomDetails(roomId, { photos: newPhotos });
-  };
+  }, [localRooms, updateRoomDetails]);
 
-  const addItem = () => {
+  const addItem = useCallback(() => {
     if (!localInspection || !selectedRoom || !newItemName.trim()) return;
 
     const newItem: Item = {
@@ -1012,38 +767,24 @@ export default function App() {
     setNewItemName('');
     setIsAddingItem(false);
     setHasUnsavedChanges(true);
-  };
+  }, [localInspection, selectedRoom, newItemName, localItems]);
 
-  const updateItem = (itemId: string, updates: Partial<Item>) => {
+  const updateItem = useCallback((itemId: string, updates: Partial<Item>) => {
     if (!selectedRoom) return;
     setLocalItems(prev => ({
       ...prev,
-      [selectedRoom.id]: (prev[selectedRoom.id] || []).map(i => i.id === itemId ? { ...i, ...updates } : i)
+      [selectedRoom.id]: (prev[selectedRoom.id] || []).map(item => 
+        item.id === itemId ? { ...item, ...updates } : item
+      )
     }));
     setHasUnsavedChanges(true);
-  };
+  }, [selectedRoom]);
 
-  const moveItem = (index: number, direction: 'up' | 'down') => {
-    if (!selectedRoom || !localItems[selectedRoom.id]) return;
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= localItems[selectedRoom.id].length) return;
-
-    const newItems = [...localItems[selectedRoom.id]];
-    const [movedItem] = newItems.splice(index, 1);
-    newItems.splice(newIndex, 0, movedItem);
-    
-    setLocalItems(prev => ({
-      ...prev,
-      [selectedRoom.id]: newItems.map((item, idx) => ({ ...item, order: idx }))
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteItem = (itemId: string) => {
+  const deleteItem = useCallback((itemId: string) => {
     if (!selectedRoom) return;
     setLocalItems(prev => ({
       ...prev,
-      [selectedRoom.id]: (prev[selectedRoom.id] || []).filter(i => i.id !== itemId)
+      [selectedRoom.id]: (prev[selectedRoom.id] || []).filter(item => item.id !== itemId)
     }));
     if (!itemId.startsWith('temp-')) {
       setDeletedItemIds(prev => ({
@@ -1052,16 +793,33 @@ export default function App() {
       }));
     }
     setHasUnsavedChanges(true);
-  };
+  }, [selectedRoom]);
 
-  const handlePhotoUpload = async (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+  const moveItem = useCallback((index: number, direction: 'up' | 'down') => {
+    if (!selectedRoom) return;
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    const roomItems = localItems[selectedRoom.id] || [];
+    if (newIndex < 0 || newIndex >= roomItems.length) return;
+
+    const newItems = [...roomItems];
+    const [movedItem] = newItems.splice(index, 1);
+    newItems.splice(newIndex, 0, movedItem);
+    
+    setLocalItems(prev => ({
+      ...prev,
+      [selectedRoom.id]: newItems.map((item, i) => ({ ...item, order: i }))
+    }));
+    setHasUnsavedChanges(true);
+  }, [selectedRoom, localItems]);
+
+  const handlePhotoUpload = useCallback(async (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || !selectedRoom) return;
 
-    const item = (localItems[selectedRoom?.id || ''] || []).find(i => i.id === itemId);
-    if (!item) return;
-
-    const currentPhotos = item.photos || [];
+    const roomItems = localItems[selectedRoom.id] || [];
+    const item = roomItems.find(i => i.id === itemId);
+    const currentPhotos = item?.photos || [];
+    
     if (currentPhotos.length + files.length > 10) {
       showToast('Limite de 10 fotos por item atingido.', 'error');
       if (currentPhotos.length >= 10) return;
@@ -1085,15 +843,126 @@ export default function App() {
     }
 
     updateItem(itemId, { photos: newPhotos });
-  };
+  }, [selectedRoom, localItems, showToast, updateItem]);
 
-  const removePhoto = (itemId: string, photoIndex: number) => {
-    const item = (localItems[selectedRoom?.id || ''] || []).find(i => i.id === itemId);
-    if (!item) return;
+  const handleEditInspection = useCallback(async (ins: Inspection) => {
+    setLoading(true);
+    try {
+      // Fetch all rooms
+      const roomsQuery = query(collection(db, `inspections/${ins.id}/rooms`), orderBy('order'));
+      const roomsSnapshot = await getDocs(roomsQuery);
+      const roomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+      
+      // Fetch all items for all rooms
+      const itemsMap: { [roomId: string]: Item[] } = {};
+      for (const room of roomsData) {
+        const itemsQuery = query(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`), orderBy('order'));
+        const itemsSnapshot = await getDocs(itemsQuery);
+        itemsMap[room.id] = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+      }
+      
+      setLocalInspection({ ...ins });
+      setLocalRooms(roomsData);
+      setLocalItems(itemsMap);
+      setDeletedRoomIds([]);
+      setDeletedItemIds({});
+      setHasUnsavedChanges(false);
+      
+      setCurrentInspection(ins);
+      setView('edit');
+    } catch (error) {
+      console.error('Error loading inspection:', error);
+      showToast('Erro ao carregar dados da vistoria', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  const handleBackToDashboard = useCallback(() => {
+    if (hasUnsavedChanges) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Sair sem Salvar',
+        message: 'Existem alterações não salvas. Deseja realmente sair sem salvar?',
+        confirmText: 'Sair sem Salvar',
+        confirmVariant: 'danger',
+        onConfirm: () => {
+          setView('dashboard');
+          setLocalInspection(null);
+          setLocalRooms([]);
+          setLocalItems({});
+          setSelectedRoom(null);
+          setHasUnsavedChanges(false);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      });
+    } else {
+      setView('dashboard');
+      setLocalInspection(null);
+      setLocalRooms([]);
+      setLocalItems({});
+      setSelectedRoom(null);
+    }
+  }, [hasUnsavedChanges]);
+
+  const handleSaveWithConfirmation = useCallback(() => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Salvar Vistoria',
+      message: 'Deseja salvar os dados inseridos nesta vistoria?',
+      confirmText: 'Salvar',
+      confirmVariant: 'primary',
+      onConfirm: () => {
+        saveInspection();
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  }, [saveInspection]);
+
+  const generateReport = useCallback(async (ins: Inspection) => {
+    setLoading(true);
+    try {
+      // Fetch all rooms
+      const roomsQuery = query(collection(db, `inspections/${ins.id}/rooms`), orderBy('order'));
+      const roomsSnapshot = await getDocs(roomsQuery);
+      const roomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+      
+      // Fetch all items for all rooms
+      const itemsMap: { [roomId: string]: Item[] } = {};
+      for (const room of roomsData) {
+        const itemsQuery = query(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`), orderBy('order'));
+        const itemsSnapshot = await getDocs(itemsQuery);
+        itemsMap[room.id] = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+      }
+
+      const reportData = {
+        ...ins,
+        rooms: roomsData.map(room => ({
+          ...room,
+          items: itemsMap[room.id] || []
+        }))
+      };
+
+      await generateInspectionPDF(reportData as any);
+      showToast('Relatório gerado com sucesso!', 'success');
+    } catch (error) {
+      console.error('Error generating report:', error);
+      showToast('Erro ao gerar relatório', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  const removePhoto = useCallback((itemId: string, photoIndex: number) => {
+    if (!selectedRoom) return;
+    const roomItems = localItems[selectedRoom.id] || [];
+    const item = roomItems.find(i => i.id === itemId);
+    if (!item || !item.photos) return;
+    
     const newPhotos = [...item.photos];
     newPhotos.splice(photoIndex, 1);
     updateItem(itemId, { photos: newPhotos });
-  };
+  }, [selectedRoom, localItems, updateItem]);
 
   if (!isLoggedIn) {
     return <Login onLogin={() => setIsLoggedIn(true)} />;
@@ -1149,777 +1018,83 @@ export default function App() {
       <main className="max-w-4xl mx-auto p-6">
         <AnimatePresence mode="wait">
           {view === 'dashboard' && (
-            <motion.div 
-              key="dashboard"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="space-y-6"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Minhas Vistorias</h2>
-                <Button 
-                  onClick={() => setView('new')} 
-                  icon={Plus}
-                >
-                  Nova Vistoria
-                </Button>
-              </div>
-
-              {inspections.length === 0 ? (
-                <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-zinc-300">
-                  <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <ClipboardList className="text-zinc-400" />
-                  </div>
-                  <h3 className="text-lg font-medium">Nenhuma vistoria encontrada</h3>
-                  <p className="text-zinc-500">Comece criando sua primeira vistoria imobiliária.</p>
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {inspections.map((ins) => (
-                    <Card key={ins.id} className="hover:border-zinc-300 transition-colors cursor-pointer group relative" >
-                      <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4" onClick={async () => {
-                        setLoading(true);
-                        try {
-                          // Fetch all rooms
-                          const roomsQuery = query(collection(db, `inspections/${ins.id}/rooms`), orderBy('order'));
-                          const roomsSnapshot = await getDocs(roomsQuery);
-                          const roomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
-                          
-                          // Fetch all items for all rooms
-                          const itemsMap: { [roomId: string]: Item[] } = {};
-                          for (const room of roomsData) {
-                            const itemsQuery = query(collection(db, `inspections/${ins.id}/rooms/${room.id}/items`), orderBy('order'));
-                            const itemsSnapshot = await getDocs(itemsQuery);
-                            itemsMap[room.id] = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
-                          }
-                          
-                          setLocalInspection({ ...ins });
-                          setLocalRooms(roomsData);
-                          setLocalItems(itemsMap);
-                          setDeletedRoomIds([]);
-                          setDeletedItemIds({});
-                          setHasUnsavedChanges(false);
-                          
-                          setCurrentInspection(ins);
-                          setView('edit');
-                        } catch (error) {
-                          console.error('Error loading inspection:', error);
-                          showToast('Erro ao carregar dados da vistoria', 'error');
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}>
-                        <div className="flex gap-4 items-start flex-1">
-                          <div className="w-12 h-12 bg-zinc-100 rounded-xl flex-shrink-0 flex items-center justify-center group-hover:bg-brand-blue group-hover:text-white transition-colors">
-                            <MapPin size={24} />
-                          </div>
-                          <div className="min-w-0">
-                            <h3 className="font-bold text-lg truncate">
-                              {ins.property?.address || ins.address}
-                              {ins.property?.complement && ` - ${ins.property.complement}`}
-                            </h3>
-                            <div className="flex flex-wrap items-center gap-2 mt-1">
-                              <Badge variant={ins.type === 'entrada' ? 'info' : ins.type === 'saida' ? 'danger' : 'warning'}>
-                                {ins.type}
-                              </Badge>
-                              <span className="text-xs text-zinc-500 flex items-center gap-1">
-                                <Calendar size={12} />
-                                {new Date(ins.date).toLocaleDateString()}
-                              </span>
-                              <Badge variant={ins.status === 'completed' ? 'success' : 'warning'}>
-                                {ins.status === 'completed' ? 'Finalizada' : 'Em andamento'}
-                              </Badge>
-                              {ins.property?.neighborhood && (
-                                <span className="text-xs text-zinc-400">• {ins.property.neighborhood}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 pt-3 sm:pt-0">
-                          <div className="flex items-center gap-2">
-                            <Button 
-                              variant="ghost" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                generateReport(ins);
-                              }} 
-                              className="text-brand-blue hover:bg-zinc-100 flex items-center gap-2 px-3 py-2"
-                              title="Gerar PDF"
-                            >
-                              <FileText size={18} />
-                              <span className="text-sm font-medium">Gerar PDF</span>
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                duplicateInspection(ins);
-                              }} 
-                              className="text-zinc-500 hover:text-brand-blue p-2"
-                              title="Duplicar Vistoria"
-                            >
-                              <Copy size={18} />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteInspection(ins.id);
-                              }} 
-                              className="text-red-400 hover:text-red-500 p-2"
-                              title="Excluir Vistoria"
-                            >
-                              <Trash2 size={18} />
-                            </Button>
-                          </div>
-                          <ChevronRight className="text-zinc-300 group-hover:text-brand-blue transition-colors" />
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </motion.div>
+            <Dashboard 
+              inspections={inspections}
+              onNewInspection={() => setView('new')}
+              onEditInspection={handleEditInspection}
+              onDeleteInspection={deleteInspection}
+              onDuplicateInspection={duplicateInspection}
+              onGenerateReport={generateReport}
+            />
           )}
 
           {view === 'new' && (
-            <motion.div 
-              key="new"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="max-w-2xl mx-auto pb-20"
-            >
-              <Button variant="ghost" onClick={() => setView('dashboard')} icon={ArrowLeft} className="mb-6">Voltar</Button>
-              <Card className="p-8">
-                <h2 className="text-2xl font-bold mb-6">Nova Vistoria</h2>
-                <form onSubmit={createInspection} className="space-y-8">
-                  {/* Property Info */}
-                  <div className="space-y-4">
-                    <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Dados do Imóvel</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="md:col-span-2 space-y-2">
-                        <label className="text-sm font-semibold text-zinc-700">Endereço</label>
-                        <input name="address" required placeholder="Rua, Número" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-zinc-700">Complemento</label>
-                        <input name="complement" placeholder="Apto, Bloco, etc" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-zinc-700">Bairro</label>
-                        <input name="neighborhood" required placeholder="Bairro" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-zinc-700">Cidade</label>
-                        <input name="city" required placeholder="Cidade" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-zinc-700">CEP</label>
-                        <input name="cep" required onChange={handleCEPChange} placeholder="00000-000" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Inspection Info */}
-                  <div className="space-y-4">
-                    <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Dados da Vistoria</h3>
-                    <div className="space-y-2">
-                      <label className="text-sm font-semibold text-zinc-700">Tipo de Vistoria</label>
-                      <select 
-                        name="type" 
-                        value={newInspectionType}
-                        onChange={(e) => setNewInspectionType(e.target.value as InspectionType)}
-                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none transition-all"
-                      >
-                        <option value="entrada">Vistoria de Entrada</option>
-                        <option value="saida">Vistoria de Saída</option>
-                        <option value="rotina">Vistoria de Rotina</option>
-                        <option value="venda">Vistoria de Compra/Venda</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-semibold text-zinc-700">Status da Vistoria</label>
-                      <select 
-                        name="status" 
-                        value={newInspectionStatus}
-                        onChange={(e) => setNewInspectionStatus(e.target.value as InspectionStatus)}
-                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none transition-all"
-                      >
-                        <option value="draft">Em andamento</option>
-                        <option value="completed">Finalizada</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Inspector Info */}
-                  <div className="space-y-4">
-                    <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Dados do Vistoriador</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-zinc-700">Nome Completo</label>
-                        <input name="inspectorName" required placeholder="Nome do vistoriador" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-zinc-700">CPF</label>
-                        <input name="inspectorCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Involved Parties */}
-                  <div className="space-y-4">
-                    <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Partes Envolvidas</h3>
-                    {newInspectionType === 'venda' ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
-                          <p className="font-bold text-sm">Vendedor</p>
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
-                            <input name="sellerName" required placeholder="Nome do vendedor" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                            <input name="sellerCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                          </div>
-                        </div>
-                        <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
-                          <p className="font-bold text-sm">Comprador</p>
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
-                            <input name="buyerName" required placeholder="Nome do comprador" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                            <input name="buyerCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
-                          <p className="font-bold text-sm">Proprietário</p>
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
-                            <input name="ownerName" required placeholder="Nome do proprietário" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                            <input name="ownerCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                          </div>
-                        </div>
-                        <div className="space-y-4 p-4 bg-zinc-50 rounded-2xl">
-                          <p className="font-bold text-sm">Inquilino</p>
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-500">Nome Completo</label>
-                            <input name="tenantName" required placeholder="Nome do inquilino" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-500">CPF</label>
-                            <input name="tenantCpf" required onChange={handleCPFChange} placeholder="000.000.000-00" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <Button className="w-full py-4" icon={isCreating ? undefined : CheckCircle2} disabled={isCreating}>
-                    {isCreating ? 'Criando Vistoria...' : 'Iniciar Vistoria'}
-                  </Button>
-                </form>
-              </Card>
-            </motion.div>
+            <NewInspection 
+              onBack={() => setView('dashboard')}
+              onSubmit={createInspection}
+              inspectionType={newInspectionType}
+              onTypeChange={setNewInspectionType}
+              inspectionStatus={newInspectionStatus}
+              onStatusChange={setNewInspectionStatus}
+              onCPFChange={handleCPFChange}
+              onCEPChange={handleCEPChange}
+              isCreating={isCreating}
+            />
           )}
 
           {view === 'edit' && localInspection && (
-            <motion.div 
-              key="edit"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-8"
-            >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center justify-between md:justify-start gap-2">
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" onClick={() => {
-                      if (hasUnsavedChanges) {
-                        setConfirmModal({
-                          isOpen: true,
-                          title: 'Sair sem Salvar',
-                          message: 'Existem alterações não salvas. Deseja realmente sair sem salvar?',
-                          confirmText: 'Sair sem Salvar',
-                          confirmVariant: 'danger',
-                          onConfirm: () => {
-                            setView('dashboard');
-                            setLocalInspection(null);
-                            setLocalRooms([]);
-                            setLocalItems({});
-                            setSelectedRoom(null);
-                            setHasUnsavedChanges(false);
-                            setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                          }
-                        });
-                      } else {
-                        setView('dashboard');
-                        setLocalInspection(null);
-                        setLocalRooms([]);
-                        setLocalItems({});
-                        setSelectedRoom(null);
-                      }
-                    }} icon={ArrowLeft} className="px-2 md:px-4">Painel</Button>
-                    <Button 
-                      variant="secondary" 
-                      onClick={() => generateReport(localInspection)} 
-                      icon={FileText}
-                      className="text-xs py-1 px-3"
-                    >
-                      Gerar PDF
-                    </Button>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => deleteInspection(localInspection.id)} 
-                    className="text-red-400 hover:text-red-500 p-2"
-                    title="Excluir Vistoria"
-                  >
-                    <Trash2 size={18} />
-                  </Button>
-                </div>
-                
-                <div className="text-left md:text-right bg-zinc-50 md:bg-transparent p-4 md:p-0 rounded-2xl border border-zinc-100 md:border-0">
-                  <h2 className="text-lg md:text-xl font-bold text-zinc-900 leading-tight">
-                    {localInspection.property?.address || localInspection.address}
-                    {localInspection.property?.complement && ` - ${localInspection.property.complement}`}
-                  </h2>
-                  <div className="flex flex-col md:items-end gap-2 mt-1">
-                    <p className="text-[10px] md:text-xs text-zinc-500 uppercase tracking-widest font-bold">
-                      {localInspection.type}
-                      {localInspection.property?.neighborhood && ` • ${localInspection.property.neighborhood}`}
-                      {localInspection.property?.city && ` • ${localInspection.property.city}`}
-                    </p>
-                    <button 
-                      onClick={() => setIsEditingProperty(true)} 
-                      className="flex items-center gap-1.5 text-brand-blue hover:text-brand-blue/80 transition-colors text-xs font-bold uppercase tracking-wider"
-                    >
-                      <div className="p-1.5 bg-brand-blue/10 rounded-lg">
-                        <Pencil size={12} />
-                      </div>
-                      <span>Editar Dados do Imóvel</span>
-                    </button>
-
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="p-1.5 bg-zinc-100 rounded-lg">
-                        <ClipboardList size={12} className="text-zinc-500" />
-                      </div>
-                      <select 
-                        value={localInspection.status}
-                        onChange={(e) => {
-                          const newStatus = e.target.value as InspectionStatus;
-                          setLocalInspection(prev => prev ? { ...prev, status: newStatus } : null);
-                          setHasUnsavedChanges(true);
-                        }}
-                        className="bg-transparent text-xs font-bold uppercase tracking-wider text-zinc-600 outline-none cursor-pointer hover:text-brand-blue transition-colors"
-                      >
-                        <option value="draft">Em andamento</option>
-                        <option value="completed">Finalizada</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm space-y-4">
-                <div className="flex items-center gap-2 text-zinc-500 uppercase text-xs font-bold tracking-widest">
-                  <FileText size={14} />
-                  <span>Descrição Geral do Imóvel</span>
-                </div>
-                <textarea
-                  placeholder="Descreva as características gerais do imóvel (ex: pintura, conservação, observações importantes)..."
-                  value={localInspection.propertyDescription || ''}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    setLocalInspection(prev => prev ? { ...prev, propertyDescription: newValue } : null);
-                    setHasUnsavedChanges(true);
-                  }}
-                  className="w-full p-4 rounded-2xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[120px] bg-zinc-50/50"
-                />
-
-                <div className="flex items-center gap-2 text-zinc-500 uppercase text-xs font-bold tracking-widest pt-4">
-                  <FileText size={14} />
-                  <span>Parecer do Vistoriador</span>
-                </div>
-                <textarea
-                  placeholder="Descreva o parecer final da vistoria (ex: o imóvel encontra-se em perfeitas condições para entrega)..."
-                  value={localInspection.inspectorOpinion || ''}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    setLocalInspection(prev => prev ? { ...prev, inspectorOpinion: newValue } : null);
-                    setHasUnsavedChanges(true);
-                  }}
-                  className="w-full p-4 rounded-2xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[120px] bg-zinc-50/50"
-                />
-              </div>
-
-              <div className="grid md:grid-cols-3 gap-8">
-                {/* Rooms List */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-zinc-500 uppercase text-xs tracking-widest">Cômodos</h3>
-                    <Button variant="ghost" onClick={() => setIsAddingRoom(true)} className="p-1"><Plus size={16} /></Button>
-                  </div>
-                  <div className="space-y-2">
-                    {isAddingRoom && (
-                      <div className="p-2 bg-white rounded-xl border border-brand-blue shadow-sm space-y-2">
-                        <input 
-                          autoFocus
-                          placeholder="Nome do cômodo..."
-                          value={newRoomName}
-                          onChange={(e) => setNewRoomName(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && addRoom()}
-                          className="w-full px-2 py-1 text-sm outline-none"
-                        />
-                        <div className="flex gap-1">
-                          <Button className="flex-1 py-1 text-xs" onClick={addRoom} disabled={isAddingRoomLoading}>
-                            {isAddingRoomLoading ? 'Salvando...' : 'Salvar'}
-                          </Button>
-                          <Button variant="secondary" className="flex-1 py-1 text-xs" onClick={() => setIsAddingRoom(false)} disabled={isAddingRoomLoading}>Cancelar</Button>
-                        </div>
-                      </div>
-                    )}
-                    {localRooms.map((room, index) => (
-                      <div key={room.id} className="group relative">
-                        {editingRoomId === room.id ? (
-                          <div className="p-2 bg-white rounded-xl border-brand-blue border shadow-sm space-y-2">
-                            <input 
-                              autoFocus
-                              placeholder="Nome do cômodo..."
-                              value={editingRoomName}
-                              onChange={(e) => setEditingRoomName(e.target.value)}
-                              onKeyDown={(e) => e.key === 'Enter' && updateRoom(room.id)}
-                              className="w-full px-2 py-1 text-sm outline-none"
-                            />
-                            <div className="flex gap-1">
-                              <button 
-                                onClick={() => updateRoom(room.id)}
-                                className="flex-1 py-1 text-xs bg-brand-blue text-white rounded-lg font-bold"
-                              >
-                                Salvar
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  setEditingRoomId(null);
-                                  setEditingRoomName('');
-                                }}
-                                className="flex-1 py-1 text-xs bg-zinc-100 text-zinc-600 rounded-lg font-bold"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => setSelectedRoom(room)}
-                              className={`w-full text-left px-4 py-3 rounded-xl font-medium transition-all pr-24 ${selectedRoom?.id === room.id ? 'bg-brand-blue text-white shadow-lg' : 'bg-white border border-zinc-100 hover:border-zinc-300'}`}
-                            >
-                              {room.name}
-                            </button>
-                            <div className={`absolute right-2 top-1/2 -translate-y-1/2 flex gap-0.5 transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100`}>
-                              <div className="flex flex-col">
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); moveRoom(index, 'up'); }}
-                                  disabled={index === 0 || isMoving}
-                                  className={`p-1 rounded disabled:opacity-10 ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
-                                >
-                                  <ChevronUp size={16} />
-                                </button>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); moveRoom(index, 'down'); }}
-                                  disabled={index === localRooms.length - 1 || isMoving}
-                                  className={`p-1 rounded disabled:opacity-10 ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
-                                >
-                                  <ChevronDown size={16} />
-                                </button>
-                              </div>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingRoomId(room.id);
-                                  setEditingRoomName(room.name || '');
-                                }}
-                                className={`p-1.5 rounded-lg transition-all ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-brand-blue'}`}
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteRoom(room.id);
-                                }}
-                                className={`p-1.5 rounded-lg transition-all ${selectedRoom?.id === room.id ? 'text-white/50 hover:text-white' : 'text-zinc-300 hover:text-red-500'}`}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Items List */}
-                <div className="md:col-span-2 space-y-6">
-                  {!currentRoom ? (
-                    <div className="h-64 flex flex-col items-center justify-center bg-zinc-100 rounded-3xl text-zinc-400 border border-dashed border-zinc-300">
-                      <Info size={32} className="mb-2" />
-                      <p>Selecione um cômodo para começar</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-2xl font-bold">{currentRoom.name}</h3>
-                        <Button onClick={() => setIsAddingItem(true)} icon={Plus} variant="secondary">Adicionar Item</Button>
-                      </div>
-
-                      <Card className="p-6 space-y-4 bg-zinc-50/50 border-dashed border-2 border-zinc-200">
-                        <div className="space-y-2">
-                          <label className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Descrição do Ambiente</label>
-                          <textarea
-                            placeholder="Descreva o estado geral deste cômodo..."
-                            value={currentRoom.description || ''}
-                            onChange={(e) => updateRoomDetails(currentRoom.id, { description: e.target.value })}
-                            className="w-full p-3 rounded-xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[100px] bg-white"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <label className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Fotos do Ambiente</label>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {currentRoom.photos?.map((photo, idx) => (
-                              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden group border border-zinc-200">
-                                <img src={photo} alt={`Room ${idx}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                <button 
-                                  onClick={() => removeRoomPhoto(currentRoom.id, idx)}
-                                  className="absolute top-1 right-1 p-1 bg-red-500/60 text-white rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
-                                >
-                                  <X size={12} />
-                                </button>
-                              </div>
-                            ))}
-                            <label className="aspect-square rounded-xl border-2 border-dashed border-zinc-300 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-brand-blue hover:bg-brand-blue/5 transition-all text-zinc-400 hover:text-brand-blue">
-                              <Camera size={24} />
-                              <span className="text-[10px] font-bold uppercase">Adicionar Foto</span>
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                multiple
-                                className="hidden" 
-                                onChange={(e) => handleRoomPhotoUpload(currentRoom.id, e)} 
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      </Card>
-
-                      {isAddingItem && (
-                        <Card className="p-4 border-brand-blue border-2">
-                          <div className="space-y-4">
-                            <h4 className="font-bold">O que será vistoriado?</h4>
-                            <input 
-                              autoFocus
-                              placeholder="Ex: Pintura, Piso, Janela..."
-                              value={newItemName}
-                              onChange={(e) => setNewItemName(e.target.value)}
-                              onKeyDown={(e) => e.key === 'Enter' && addItem()}
-                              className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue"
-                            />
-                            <div className="flex gap-2">
-                              <Button className="flex-1" onClick={addItem} disabled={isAddingItemLoading}>
-                                {isAddingItemLoading ? 'Adicionando...' : 'Adicionar'}
-                              </Button>
-                              <Button variant="secondary" className="flex-1" onClick={() => setIsAddingItem(false)} disabled={isAddingItemLoading}>Cancelar</Button>
-                            </div>
-                          </div>
-                        </Card>
-                      )}
-
-                      <div className="space-y-4">
-                        {currentItems.map((item, index) => (
-                          <Card key={item.id} className="p-6 space-y-4">
-                            <div className="flex items-start justify-between">
-                              <div className="space-y-1 flex-1">
-                                {editingItemId === item.id ? (
-                                  <div className="flex gap-2 items-center mb-2">
-                                    <input 
-                                      autoFocus
-                                      value={editingItemName}
-                                      onChange={(e) => setEditingItemName(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          updateItem(item.id, { name: editingItemName });
-                                          setEditingItemId(null);
-                                        }
-                                        if (e.key === 'Escape') {
-                                          setEditingItemId(null);
-                                        }
-                                      }}
-                                      className="flex-1 px-3 py-1 text-lg font-bold border border-brand-blue rounded-lg outline-none"
-                                    />
-                                    <button 
-                                      onClick={() => {
-                                        updateItem(item.id, { name: editingItemName });
-                                        setEditingItemId(null);
-                                      }}
-                                      className="p-2 bg-brand-blue text-white rounded-lg"
-                                    >
-                                      <Save size={16} />
-                                    </button>
-                                    <button 
-                                      onClick={() => setEditingItemId(null)}
-                                      className="p-2 bg-zinc-100 text-zinc-500 rounded-lg"
-                                    >
-                                      <X size={16} />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2 group/title">
-                                    <h4 className="font-bold text-lg">{item.name}</h4>
-                                    <button 
-                                      onClick={() => {
-                                        setEditingItemId(item.id);
-                                        setEditingItemName(item.name);
-                                      }}
-                                      className="p-1 text-zinc-400 hover:text-brand-blue transition-all"
-                                    >
-                                      <Pencil size={14} />
-                                    </button>
-                                  </div>
-                                )}
-                                <div className="flex gap-2">
-                                  {(['novo', 'bom', 'regular', 'ruim'] as ItemCondition[]).map((cond) => (
-                                    <button
-                                      key={cond}
-                                      onClick={() => updateItem(item.id, { condition: cond })}
-                                      className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${item.condition === cond ? 'bg-brand-blue text-white' : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'}`}
-                                    >
-                                      {cond}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className="flex gap-1">
-                                <div className="flex flex-col gap-1 mr-2">
-                                  <button 
-                                    onClick={() => moveItem(index, 'up')}
-                                    disabled={index === 0 || isMoving}
-                                    className="p-1 rounded hover:bg-zinc-100 disabled:opacity-20 text-zinc-400 hover:text-brand-blue transition-all"
-                                  >
-                                    <ChevronUp size={16} />
-                                  </button>
-                                  <button 
-                                    onClick={() => moveItem(index, 'down')}
-                                    disabled={index === currentItems.length - 1 || isMoving}
-                                    className="p-1 rounded hover:bg-zinc-100 disabled:opacity-20 text-zinc-400 hover:text-brand-blue transition-all"
-                                  >
-                                    <ChevronDown size={16} />
-                                  </button>
-                                </div>
-                                <Button variant="ghost" onClick={() => deleteItem(item.id)} className="text-red-400 hover:text-red-500 p-2">
-                                  <Trash2 size={18} />
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="space-y-4">
-                              <textarea
-                                placeholder="Observações sobre o estado de conservação..."
-                                value={item.description || ''}
-                                onChange={(e) => updateItem(item.id, { description: e.target.value })}
-                                className="w-full p-3 rounded-xl border border-zinc-100 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[80px]"
-                              />
-
-                              <div className="flex items-center gap-4">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={item.hasFurniture || false} 
-                                    onChange={(e) => updateItem(item.id, { hasFurniture: e.target.checked })}
-                                    className="w-4 h-4 rounded border-zinc-300 text-brand-blue focus:ring-brand-blue"
-                                  />
-                                  <span className="text-sm font-medium">Existe avaria?</span>
-                                </label>
-                              </div>
-
-                              {item.hasFurniture && (
-                                <input
-                                  placeholder="Descreva a avaria encontrada..."
-                                  value={item.furnitureDescription || ''}
-                                  onChange={(e) => updateItem(item.id, { furnitureDescription: e.target.value })}
-                                  className="w-full px-4 py-2 rounded-xl border border-zinc-100 focus:ring-1 focus:ring-brand-blue outline-none text-sm"
-                                />
-                              )}
-
-                              {/* Photos */}
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Fotos</p>
-                                  <label className="cursor-pointer">
-                                    <input 
-                                      type="file" 
-                                      accept="image/*" 
-                                      multiple
-                                      capture="environment"
-                                      className="hidden" 
-                                      onChange={(e) => handlePhotoUpload(item.id, e)} 
-                                    />
-                                    <div className="flex items-center gap-1 text-xs font-bold text-brand-blue hover:underline">
-                                      <Camera size={14} />
-                                      Tirar Foto
-                                    </div>
-                                  </label>
-                                </div>
-                                
-                                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                                  {item.photos.map((photo, idx) => (
-                                    <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-zinc-200 group">
-                                      <img src={photo} alt="Vistoria" className="w-full h-full object-cover" />
-                                      <button 
-                                        onClick={() => removePhoto(item.id, idx)}
-                                        className="absolute top-1 right-1 bg-red-500/80 text-white p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
-                                      >
-                                        <X size={12} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                  <label className="aspect-square rounded-lg border-2 border-dashed border-zinc-200 flex flex-col items-center justify-center text-zinc-400 hover:border-zinc-400 hover:text-zinc-500 cursor-pointer transition-all">
-                                    <input 
-                                      type="file" 
-                                      accept="image/*" 
-                                      multiple
-                                      className="hidden" 
-                                      onChange={(e) => handlePhotoUpload(item.id, e)} 
-                                    />
-                                    <Plus size={20} />
-                                  </label>
-                                </div>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-
-                        {currentItems.length === 0 && (
-                          <div className="text-center py-12 bg-white rounded-3xl border border-zinc-100">
-                            <p className="text-zinc-500">Nenhum item registrado neste cômodo.</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
+            <InspectionEdit 
+              localInspection={localInspection}
+              localRooms={localRooms}
+              localItems={localItems}
+              selectedRoom={selectedRoom}
+              hasUnsavedChanges={hasUnsavedChanges}
+              isSaving={isSaving}
+              isAddingRoom={isAddingRoom}
+              newRoomName={newRoomName}
+              isAddingRoomLoading={isAddingRoomLoading}
+              editingRoomId={editingRoomId}
+              editingRoomName={editingRoomName}
+              isAddingItem={isAddingItem}
+              newItemName={newItemName}
+              isAddingItemLoading={isAddingItemLoading}
+              editingItemId={editingItemId}
+              editingItemName={editingItemName}
+              isMoving={isMoving}
+              onBack={handleBackToDashboard}
+              onGenerateReport={generateReport}
+              onDeleteInspection={deleteInspection}
+              onEditProperty={() => setIsEditingProperty(true)}
+              onUpdateStatus={(status) => {
+                setLocalInspection(prev => prev ? { ...prev, status } : null);
+                setHasUnsavedChanges(true);
+              }}
+              onUpdatePropertyDescription={updatePropertyDescription}
+              onUpdateInspectorOpinion={updateInspectorOpinion}
+              onAddRoom={addRoom}
+              onSetIsAddingRoom={setIsAddingRoom}
+              onSetNewRoomName={setNewRoomName}
+              onUpdateRoom={updateRoom}
+              onSetEditingRoomId={setEditingRoomId}
+              onSetEditingRoomName={setEditingRoomName}
+              onDeleteRoom={deleteRoom}
+              onMoveRoom={moveRoom}
+              onSelectRoom={setSelectedRoom}
+              onUpdateRoomDetails={updateRoomDetails}
+              onRemoveRoomPhoto={removeRoomPhoto}
+              onRoomPhotoUpload={handleRoomPhotoUpload}
+              onAddItem={addItem}
+              onSetIsAddingItem={setIsAddingItem}
+              onSetNewItemName={setNewItemName}
+              onUpdateItem={updateItem}
+              onDeleteItem={deleteItem}
+              onMoveItem={moveItem}
+              onSetEditingItemId={setEditingItemId}
+              onSetEditingItemName={setEditingItemName}
+              onPhotoUpload={handlePhotoUpload}
+              onRemovePhoto={removePhoto}
+              onSave={handleSaveWithConfirmation}
+            />
           )}
         </AnimatePresence>
       </main>
