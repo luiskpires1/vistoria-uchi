@@ -460,8 +460,8 @@ export const generateInspectionPDF = async (data: InspectionData) => {
 
   // Signatures
   // Ensure title and all signatures are on the same page if possible
-  // Estimating height: title(15) + closure(15) + contest(10) + date(15) + signatures(80) = ~135
-  currentY = checkPageBreak(135, currentY);
+  // Estimating height: title(20) + closure(20) + contest(15) + date(20) + signatures(80) = ~155
+  currentY = checkPageBreak(160, currentY);
   currentY = drawSectionHeader('TERMO DE ENCERRAMENTO E ASSINATURAS', currentY);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
@@ -501,8 +501,6 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     const signer = signers[i];
     const isEven = i % 2 === 0;
     
-    if (isEven) currentY = checkPageBreak(40, currentY);
-
     let finalX = isEven ? startX : startX + sigWidth + sigSpacing;
     if (i === 2 && signers.length === 3) finalX = (pageWidth - sigWidth) / 2;
 
