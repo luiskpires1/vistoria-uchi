@@ -417,6 +417,7 @@ export default function App() {
   const [isAddingRoomLoading, setIsAddingRoomLoading] = useState(false);
   const [isAddingItemLoading, setIsAddingItemLoading] = useState(false);
   const [newInspectionType, setNewInspectionType] = useState<InspectionType>('entrada');
+  const [newInspectionStatus, setNewInspectionStatus] = useState<InspectionStatus>('draft');
 
   const currentRoom = view === 'edit'
     ? localRooms.find(r => r.id === selectedRoom?.id) || selectedRoom
@@ -536,6 +537,7 @@ export default function App() {
     const city = formData.get('city') as string;
     const cep = formData.get('cep') as string;
     const type = formData.get('type') as InspectionType;
+    const status = formData.get('status') as InspectionStatus;
 
     const inspectorName = formData.get('inspectorName') as string;
     const inspectorCpf = formData.get('inspectorCpf') as string;
@@ -568,7 +570,7 @@ export default function App() {
         },
         type,
         date: new Date().toISOString(),
-        status: 'draft',
+        status,
         inspectorId: user.uid,
         inspector: { name: inspectorName, cpf: inspectorCpf }
       };
@@ -775,6 +777,7 @@ export default function App() {
     const neighborhood = formData.get('neighborhood') as string;
     const city = formData.get('city') as string;
     const cep = formData.get('cep') as string;
+    const status = formData.get('status') as InspectionStatus;
 
     const inspectorName = formData.get('inspectorName') as string;
     const inspectorCpf = formData.get('inspectorCpf') as string;
@@ -798,6 +801,7 @@ export default function App() {
         city,
         cep
       },
+      status,
       inspector: { name: inspectorName, cpf: inspectorCpf }
     };
 
@@ -1333,6 +1337,18 @@ export default function App() {
                         <option value="saida">Vistoria de Saída</option>
                         <option value="rotina">Vistoria de Rotina</option>
                         <option value="venda">Vistoria de Compra/Venda</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-zinc-700">Status da Vistoria</label>
+                      <select 
+                        name="status" 
+                        value={newInspectionStatus}
+                        onChange={(e) => setNewInspectionStatus(e.target.value as InspectionStatus)}
+                        className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none transition-all"
+                      >
+                        <option value="draft">Em andamento</option>
+                        <option value="completed">Finalizada</option>
                       </select>
                     </div>
                   </div>
@@ -1949,6 +1965,17 @@ export default function App() {
                       <label className="text-sm font-semibold text-zinc-700">CEP</label>
                       <input name="cep" required onChange={handleCEPChange} defaultValue={localInspection.property?.cep} placeholder="00000-000" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue" />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-zinc-700">Status da Vistoria</label>
+                    <select 
+                      name="status" 
+                      defaultValue={localInspection.status}
+                      className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue"
+                    >
+                      <option value="draft">Em andamento</option>
+                      <option value="completed">Finalizada</option>
+                    </select>
                   </div>
                 </div>
               </div>

@@ -86,7 +86,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   doc.setTextColor(255, 255, 255);
   doc.text('CNPJ 63.595.950/0001-26 | CRECI 28561', 45, 19);
   doc.text('E-mail: contato@uchiimoveis.com', 45, 24);
-  doc.text('Endereço: Rua Alcides Gonzaga 240, Boa Vista, Porto Alegre - RS, CEP: 90480-020', 45, 29);
+  doc.text('Endereço: Rua Alcides Gonzaga 240, Boa Vista, Porto Alegre - RS, 90480-020', 45, 29);
 
   // Title
   doc.setFontSize(16);
@@ -191,6 +191,44 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     const splitPropDesc = doc.splitTextToSize(data.propertyDescription, contentWidth - 10);
     doc.text(splitPropDesc, margin + 5, currentY);
     currentY += (splitPropDesc.length * 5) + SECTION_GAP;
+  }
+
+  // Resumo de Avarias Section
+  const itemsWithDamages: { room: string; item: string; description: string }[] = [];
+  for (const room of data.rooms) {
+    for (const item of room.items) {
+      if (item.hasFurniture) {
+        itemsWithDamages.push({
+          room: room.name,
+          item: item.name,
+          description: item.furnitureDescription || 'Avaria registrada sem descrição específica.'
+        });
+      }
+    }
+  }
+
+  if (itemsWithDamages.length > 0) {
+    currentY = drawSectionHeader('RESUMO DE AVARIAS', currentY);
+    const damageTableData = itemsWithDamages.map(d => [
+      d.room,
+      d.item,
+      d.description
+    ]);
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Ambiente', 'Item', 'Descrição da Avaria']],
+      body: damageTableData,
+      theme: 'striped',
+      headStyles: { fillColor: [150, 0, 0], textColor: 'white', fontSize: 11 },
+      bodyStyles: { fontSize: 11 },
+      margin: { left: margin, right: margin },
+      didDrawPage: (data: any) => {
+        currentY = data.cursor.y + 10;
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + SECTION_GAP;
   }
 
   // Rooms and Items
@@ -392,7 +430,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   const locationDateText = `${data.property.city}, ${formattedDate}.`;
   doc.setFont('helvetica', 'bold');
   doc.text(locationDateText, pageWidth / 2, currentY, { align: 'center' });
-  currentY += 20;
+  currentY += 30;
 
   const sigWidth = 65;
   const sigSpacing = 20;
