@@ -26,6 +26,14 @@ interface InspectionData {
   seller?: Person;
   propertyDescription?: string;
   inspectorOpinion?: string;
+  revisions?: {
+    id: string;
+    title: string;
+    date?: string;
+    reason?: string;
+    comments: string;
+    photos: string[];
+  }[];
   rooms: {
     name: string;
     description?: string;
@@ -52,7 +60,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   const LINE_HEIGHT = 6;
   const SECTION_GAP = 20;
   const HEADER_HEIGHT = 35;
-  const FOOTER_SPACE = 25;
+  const FOOTER_SPACE = 30;
   const MAX_Y = pageHeight - FOOTER_SPACE;
 
   // Helper for page breaks
@@ -193,6 +201,31 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     currentY += (splitPropDesc.length * 5) + SECTION_GAP;
   }
 
+  // Resumo de Revisões Section
+  if (data.revisions && data.revisions.length > 0) {
+    currentY = drawSectionHeader('RESUMO DE REVISÕES', currentY);
+    const revisionTableData = data.revisions.map(rev => [
+      rev.title,
+      rev.date ? new Date(rev.date + 'T00:00:00').toLocaleDateString('pt-BR') : '-',
+      rev.reason || '-'
+    ]);
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Revisão', 'Data', 'Motivo']],
+      body: revisionTableData,
+      theme: 'striped',
+      headStyles: { fillColor: [0, 58, 90], textColor: 'white', fontSize: 11 },
+      bodyStyles: { fontSize: 11 },
+      margin: { left: margin, right: margin, bottom: 30 },
+      didDrawPage: (data: any) => {
+        currentY = data.cursor.y + 10;
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + SECTION_GAP;
+  }
+
   // Resumo de Avarias Section
   const itemsWithDamages: { room: string; item: string; description: string }[] = [];
   for (const room of data.rooms) {
@@ -222,7 +255,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
       theme: 'striped',
       headStyles: { fillColor: [0, 58, 90], textColor: 'white', fontSize: 11 },
       bodyStyles: { fontSize: 11, textColor: [180, 0, 0] }, // Red text for damages
-      margin: { left: margin, right: margin },
+      margin: { left: margin, right: margin, bottom: 30 },
       didDrawPage: (data: any) => {
         currentY = data.cursor.y + 10;
       }
@@ -345,7 +378,7 @@ export const generateInspectionPDF = async (data: InspectionData) => {
         theme: 'striped',
         headStyles: { fillColor: [0, 58, 90], textColor: 'white', fontSize: 11 },
         bodyStyles: { fontSize: 11 },
-        margin: { left: margin, right: margin },
+        margin: { left: margin, right: margin, bottom: 30 },
         didDrawPage: (data: any) => {
           currentY = data.cursor.y + 10;
         }
@@ -458,6 +491,92 @@ export const generateInspectionPDF = async (data: InspectionData) => {
     currentY += (splitOpinion.length * 5) + SECTION_GAP;
   }
 
+  // Revisions Section
+  if (data.revisions && data.revisions.length > 0) {
+    currentY = drawSectionHeader('CONTROLE DE REVISÕES', currentY);
+    for (const rev of data.revisions) {
+      currentY = checkPageBreak(40, currentY);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 58, 90);
+      let titleText = rev.title;
+      if (rev.date) {
+        const formattedDate = new Date(rev.date + 'T00:00:00').toLocaleDateString('pt-BR');
+        titleText += ` - Data: ${formattedDate}`;
+      }
+      doc.text(titleText, margin + 5, currentY);
+      currentY += 7;
+
+      if (rev.reason) {
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(50, 50, 50);
+        doc.text(`Motivo: ${rev.reason}`, margin + 5, currentY);
+        currentY += 6;
+      }
+
+      if (rev.comments) {
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(50, 50, 50);
+        const splitComments = doc.splitTextToSize(rev.comments, contentWidth - 10);
+        doc.text(splitComments, margin + 5, currentY);
+        currentY += (splitComments.length * 5) + 5;
+      }
+
+      if (rev.photos && rev.photos.length > 0) {
+        const photoWidth = (contentWidth - 10) / 2;
+        const spacing = 10;
+        let photoX = margin + 5;
+        let maxRowHeight = 0;
+
+        for (const photo of rev.photos) {
+          try {
+            if (!photo) continue;
+            
+            // Force landscape aspect ratio (4:3)
+            const targetAspectRatio = 4 / 3;
+            const h = photoWidth / targetAspectRatio;
+
+            const oldY = currentY;
+            currentY = checkPageBreak(h + 10, currentY);
+            if (currentY < oldY) {
+              photoX = margin + 5;
+            }
+
+            let format = 'JPEG';
+            if (photo.startsWith('data:image/png')) format = 'PNG';
+            else if (photo.startsWith('data:image/webp')) format = 'WEBP';
+
+            doc.addImage(photo, format, photoX, currentY, photoWidth, h, undefined, 'FAST');
+            maxRowHeight = Math.max(maxRowHeight, h);
+            
+            if (photoX > margin + 5) {
+              currentY += maxRowHeight + spacing;
+              photoX = margin + 5;
+              maxRowHeight = 0;
+            } else {
+              photoX += photoWidth + spacing;
+            }
+          } catch (e) {
+            console.error('Error adding revision image to PDF:', e);
+            if (photoX > margin + 5) {
+              currentY += 20 + spacing;
+              photoX = margin + 5;
+            } else {
+              photoX += photoWidth + spacing;
+            }
+          }
+        }
+        if (photoX > margin + 5) {
+          currentY += maxRowHeight + spacing;
+        }
+      }
+      currentY += 10;
+    }
+    currentY += SECTION_GAP;
+  }
+
   // Signatures
   // Ensure title and all signatures are on the same page if possible
   // Estimating height: title(20) + closure(20) + contest(15) + date(20) + signatures(80) = ~155
@@ -527,4 +646,400 @@ export const generateInspectionPDF = async (data: InspectionData) => {
   }
 
   doc.save(`laudo-vistoria-${data.property.address.replace(/\s+/g, '-').toLowerCase()}.pdf`);
+};
+
+export const generateVisitPDF = async (property: any, visit: any) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const contentWidth = pageWidth - (margin * 2);
+  
+  const LINE_HEIGHT = 6;
+  const SECTION_GAP = 20;
+  const HEADER_HEIGHT = 35;
+  const FOOTER_SPACE = 30;
+  const MAX_Y = pageHeight - FOOTER_SPACE;
+
+  const checkPageBreak = (neededHeight: number, currentY: number) => {
+    if (currentY + neededHeight > MAX_Y) {
+      doc.addPage();
+      return margin + 5;
+    }
+    return currentY;
+  };
+
+  const drawSectionHeader = (title: string, y: number) => {
+    const headerHeight = 10;
+    const newY = checkPageBreak(headerHeight + 10, y);
+    doc.setFillColor(240, 240, 240);
+    doc.rect(margin, newY - 8, contentWidth, headerHeight, 'F');
+    doc.setFontSize(11);
+    doc.setTextColor(0, 58, 90);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, margin + 5, newY - 1);
+    return newY + 10;
+  };
+
+  // Header Background
+  doc.setFillColor(0, 58, 90);
+  doc.rect(0, 0, pageWidth, HEADER_HEIGHT, 'F');
+
+  // Company Info
+  doc.setFontSize(14);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Uchi Imóveis', 45, 13);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.text('CNPJ 63.595.950/0001-26 | CRECI 28561', 45, 19);
+  doc.text('E-mail: contato@uchiimoveis.com', 45, 24);
+  doc.text('Endereço: Rua Alcides Gonzaga 240, Boa Vista, Porto Alegre - RS', 45, 29);
+
+  // Logo placeholder (simulated)
+  try {
+    doc.addImage('/logo.png', 'PNG', 10, 2.5, 30, 30);
+  } catch (e) {}
+
+  // Title
+  doc.setFontSize(16);
+  doc.setTextColor(0, 58, 90);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RELATÓRIO DE VISITA IMOBILIÁRIA', pageWidth / 2, 48, { align: 'center' });
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100, 100, 100);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 55, { align: 'center' });
+
+  let currentY = 70;
+
+  // Property Info
+  currentY = drawSectionHeader('DADOS DO IMÓVEL', currentY);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(50, 50, 50);
+  doc.text(`Endereço: ${property.address}${property.complement ? ', ' + property.complement : ''}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  doc.text(`Bairro: ${property.neighborhood} - Cidade: ${property.city}`, margin + 5, currentY);
+  currentY += SECTION_GAP;
+
+  // Visit Info
+  currentY = drawSectionHeader('DADOS DA VISITA', currentY);
+  doc.setFontSize(11);
+  doc.setTextColor(50, 50, 50);
+  doc.text(`Visitante: ${visit.visitorName}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  doc.text(`Corretor: ${visit.brokerName}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  doc.text(`Data: ${new Date(visit.visitDate + 'T00:00:00').toLocaleDateString('pt-BR')} - Hora: ${visit.visitTime}`, margin + 5, currentY);
+  currentY += SECTION_GAP;
+
+  // Feedback Questions
+  if (visit.feedback) {
+    currentY = drawSectionHeader('FEEDBACK DA VISITA', currentY);
+    
+    const questions = [
+      { id: 'propertySize', label: 'Tamanho do imóvel' },
+      { id: 'roomLayout', label: 'Disposição das peças' },
+      { id: 'furniture', label: 'Mobiliário' },
+      { id: 'appliances', label: 'Eletrodomésticos' },
+      { id: 'lighting', label: 'Iluminação' },
+      { id: 'parking', label: 'Vaga de garagem' },
+      { id: 'price', label: 'Preço' },
+    ];
+
+    const feedbackTableData = questions.map(q => {
+      const data = (visit.feedback as any)[q.id];
+      return [
+        q.label,
+        data?.rating || '-',
+        data?.observation || '-'
+      ];
+    });
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Critério', 'Nota', 'Observação']],
+      body: feedbackTableData,
+      theme: 'striped',
+      headStyles: { fillColor: [0, 58, 90], textColor: 'white', fontSize: 11 },
+      bodyStyles: { fontSize: 11 },
+      margin: { left: margin, right: margin, bottom: 30 },
+      didDrawPage: (data: any) => {
+        currentY = data.cursor.y + 10;
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+
+    if (visit.feedback.propertyQualities) {
+      currentY = checkPageBreak(30, currentY);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 58, 90);
+      doc.text('QUALIDADES DO IMÓVEL:', margin + 5, currentY);
+      currentY += 7;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(50, 50, 50);
+      const splitQualities = doc.splitTextToSize(visit.feedback.propertyQualities, contentWidth - 10);
+      doc.text(splitQualities, margin + 5, currentY);
+      currentY += (splitQualities.length * 5) + 10;
+    }
+
+    if (visit.feedback.propertyDefects) {
+      currentY = checkPageBreak(30, currentY);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 58, 90);
+      doc.text('DEFEITOS DO IMÓVEL:', margin + 5, currentY);
+      currentY += 7;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(50, 50, 50);
+      const splitDefects = doc.splitTextToSize(visit.feedback.propertyDefects, contentWidth - 10);
+      doc.text(splitDefects, margin + 5, currentY);
+      currentY += (splitDefects.length * 5) + 10;
+    }
+
+    if (visit.feedback.generalObservations) {
+      currentY = checkPageBreak(40, currentY);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 58, 90);
+      doc.text('OBSERVAÇÕES GERAIS:', margin + 5, currentY);
+      currentY += 7;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(50, 50, 50);
+      const splitObs = doc.splitTextToSize(visit.feedback.generalObservations, contentWidth - 10);
+      doc.text(splitObs, margin + 5, currentY);
+      currentY += (splitObs.length * 5) + SECTION_GAP;
+    }
+  } else {
+    doc.setFontSize(11);
+    doc.setTextColor(150, 0, 0);
+    doc.text('Feedback não preenchido para esta visita.', margin + 5, currentY);
+    currentY += SECTION_GAP;
+  }
+
+  // Footer
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Uchi Imóveis', pageWidth / 2, pageHeight - 15, { align: 'center' });
+    doc.text(`Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+  }
+
+  doc.save(`relatorio-visita-${visit.visitorName.replace(/\s+/g, '-').toLowerCase()}.pdf`);
+};
+
+export const generateVisitsSummaryPDF = async (property: any, visits: any[]) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const contentWidth = pageWidth - (margin * 2);
+  
+  const LINE_HEIGHT = 6;
+  const SECTION_GAP = 20;
+  const HEADER_HEIGHT = 35;
+  const FOOTER_SPACE = 30;
+  const MAX_Y = pageHeight - FOOTER_SPACE;
+
+  const checkPageBreak = (neededHeight: number, currentY: number) => {
+    if (currentY + neededHeight > MAX_Y) {
+      doc.addPage();
+      return margin + 5;
+    }
+    return currentY;
+  };
+
+  const drawSectionHeader = (title: string, y: number) => {
+    const headerHeight = 10;
+    const newY = checkPageBreak(headerHeight + 10, y);
+    doc.setFillColor(240, 240, 240);
+    doc.rect(margin, newY - 8, contentWidth, headerHeight, 'F');
+    doc.setFontSize(11);
+    doc.setTextColor(0, 58, 90);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, margin + 5, newY - 1);
+    return newY + 10;
+  };
+
+  // Header Background
+  doc.setFillColor(0, 58, 90);
+  doc.rect(0, 0, pageWidth, HEADER_HEIGHT, 'F');
+
+  // Company Info
+  doc.setFontSize(14);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Uchi Imóveis', 45, 13);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.text('CNPJ 63.595.950/0001-26 | CRECI 28561', 45, 19);
+  doc.text('E-mail: contato@uchiimoveis.com', 45, 24);
+  doc.text('Endereço: Rua Alcides Gonzaga 240, Boa Vista, Porto Alegre - RS', 45, 29);
+
+  // Logo placeholder
+  try {
+    doc.addImage('/logo.png', 'PNG', 10, 2.5, 30, 30);
+  } catch (e) {}
+
+  // Title
+  doc.setFontSize(16);
+  doc.setTextColor(0, 58, 90);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RELATÓRIO CONSOLIDADO DE VISITAS', pageWidth / 2, 48, { align: 'center' });
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100, 100, 100);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 55, { align: 'center' });
+
+  let currentY = 70;
+
+  // Property Info
+  currentY = drawSectionHeader('DADOS DO IMÓVEL', currentY);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(50, 50, 50);
+  doc.text(`Endereço: ${property.address}${property.complement ? ', ' + property.complement : ''}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  doc.text(`Bairro: ${property.neighborhood} - Cidade: ${property.city}`, margin + 5, currentY);
+  currentY += SECTION_GAP;
+
+  const visitsWithFeedback = visits.filter(v => v.feedback);
+
+  if (visitsWithFeedback.length > 0) {
+    currentY = drawSectionHeader('RESUMO DAS AVALIAÇÕES', currentY);
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(50, 50, 50);
+    doc.text(`Total de visitas no período: ${visitsWithFeedback.length}`, margin + 5, currentY);
+    currentY += 10;
+
+    const questionsSummary = [
+      { id: 'propertySize', label: 'Tamanho do imóvel' },
+      { id: 'roomLayout', label: 'Disposição das peças' },
+      { id: 'furniture', label: 'Mobiliário' },
+      { id: 'appliances', label: 'Eletrodomésticos' },
+      { id: 'lighting', label: 'Iluminação' },
+      { id: 'parking', label: 'Vaga de garagem' },
+      { id: 'price', label: 'Preço' },
+    ];
+
+    const averagesData = questionsSummary.map(q => {
+      const sum = visitsWithFeedback.reduce((acc, v) => acc + ((v.feedback as any)[q.id]?.rating || 0), 0);
+      const avg = sum / visitsWithFeedback.length;
+      return [q.label, avg.toFixed(2)];
+    });
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Critério', 'Média das Notas']],
+      body: averagesData,
+      theme: 'striped',
+      headStyles: { fillColor: [0, 58, 90], textColor: 'white', fontSize: 11 },
+      bodyStyles: { fontSize: 11 },
+      margin: { left: margin, right: margin, bottom: 30 },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + SECTION_GAP;
+  }
+
+  if (visitsWithFeedback.length === 0) {
+    doc.setFontSize(12);
+    doc.setTextColor(150, 0, 0);
+    doc.text('Não há visitas com feedback cadastrado para este imóvel.', margin + 5, currentY);
+  } else {
+    visitsWithFeedback.forEach((visit, index) => {
+      currentY = drawSectionHeader(`VISITA ${index + 1} - ${visit.visitorName}`, currentY);
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      doc.text(`Data: ${new Date(visit.visitDate + 'T00:00:00').toLocaleDateString('pt-BR')} | Hora: ${visit.visitTime} | Corretor: ${visit.brokerName}`, margin + 5, currentY);
+      currentY += 10;
+
+      const questions = [
+        { id: 'propertySize', label: 'Tamanho' },
+        { id: 'roomLayout', label: 'Layout' },
+        { id: 'furniture', label: 'Mobília' },
+        { id: 'appliances', label: 'Eletros' },
+        { id: 'lighting', label: 'Iluminação' },
+        { id: 'parking', label: 'Vaga' },
+        { id: 'price', label: 'Preço' },
+      ];
+
+      const feedbackData = questions.map(q => {
+        const val = (visit.feedback as any)[q.id];
+        return [q.label, val?.rating || '-', val?.observation || '-'];
+      });
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Critério', 'Nota', 'Observação']],
+        body: feedbackData,
+        theme: 'grid',
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [0, 58, 90], fontSize: 9 },
+        margin: { left: margin + 5, right: margin + 5, bottom: 30 },
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 5;
+
+      if (visit.feedback.propertyQualities || visit.feedback.propertyDefects || visit.feedback.generalObservations) {
+        if (visit.feedback.propertyQualities) {
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Qualidades:', margin + 5, currentY);
+          doc.setFont('helvetica', 'normal');
+          const txt = doc.splitTextToSize(visit.feedback.propertyQualities, contentWidth - 35);
+          doc.text(txt, margin + 30, currentY);
+          currentY += (txt.length * 4) + 2;
+        }
+        if (visit.feedback.propertyDefects) {
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Defeitos:', margin + 5, currentY);
+          doc.setFont('helvetica', 'normal');
+          const txt = doc.splitTextToSize(visit.feedback.propertyDefects, contentWidth - 35);
+          doc.text(txt, margin + 30, currentY);
+          currentY += (txt.length * 4) + 2;
+        }
+        if (visit.feedback.generalObservations) {
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Obs Geral:', margin + 5, currentY);
+          doc.setFont('helvetica', 'normal');
+          const txt = doc.splitTextToSize(visit.feedback.generalObservations, contentWidth - 35);
+          doc.text(txt, margin + 30, currentY);
+          currentY += (txt.length * 4) + 5;
+        }
+      }
+      currentY += 5;
+    });
+  }
+
+  // Footer
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Uchi Imóveis', pageWidth / 2, pageHeight - 15, { align: 'center' });
+    doc.text(`Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+  }
+
+  doc.save(`relatorio-consolidado-visitas-${property.address.replace(/\s+/g, '-').toLowerCase()}.pdf`);
 };

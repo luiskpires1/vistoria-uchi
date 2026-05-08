@@ -55,6 +55,8 @@ import {
   Inspection, 
   Room, 
   Item, 
+  Property,
+  PropertyVisit,
   InspectionType, 
   ItemCondition, 
   InspectionStatus 
@@ -73,6 +75,13 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import NewInspection from './components/NewInspection';
 import InspectionEdit from './components/InspectionEdit';
+import HomePage from './components/HomePage';
+import Visits from './components/Visits';
+import PropertyRegistration from './components/PropertyRegistration';
+import PropertyDetails from './components/PropertyDetails';
+import VisitRegistration from './components/VisitRegistration';
+import VisitFeedback from './components/VisitFeedback';
+import { VisitFeedbackData } from './types';
 
 // --- Error Handling ---
 
@@ -158,7 +167,11 @@ export default function App() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState('Iniciando...');
   const [inspections, setInspections] = useState<Inspection[]>([]);
-  const [view, setView] = useState<'dashboard' | 'new' | 'edit'>('dashboard');
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [editingVisit, setEditingVisit] = useState<PropertyVisit | null>(null);
+  const [view, setView] = useState<'home' | 'dashboard' | 'visits' | 'new-property' | 'property-details' | 'new-visit' | 'visit-feedback' | 'new' | 'edit'>('home');
   const [currentInspection, setCurrentInspection] = useState<Inspection | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -298,6 +311,19 @@ export default function App() {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Inspection));
       setInspections(data);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'inspections'));
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch Properties
+  useEffect(() => {
+    const q = query(
+      collection(db, 'properties'), 
+      orderBy('address', 'asc')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
+      setProperties(data);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'properties'));
     return () => unsubscribe();
   }, []);
 
@@ -498,6 +524,28 @@ export default function App() {
       setIsSaving(false);
     }
   }, [localInspection, localRooms, localItems, deletedRoomIds, deletedItemIds, showToast]);
+
+  const deleteProperty = useCallback((id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Imóvel',
+      message: 'Tem certeza que deseja excluir este imóvel? Todas as visitas vinculadas serão perdidas.',
+      confirmText: 'Excluir',
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        try {
+          setLoading(true);
+          await deleteDoc(doc(db, 'properties', id));
+          showToast('Imóvel excluído com sucesso!', 'success');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `properties/${id}`);
+        } finally {
+          setLoading(false);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
+  }, [showToast]);
 
   const deleteInspection = useCallback((id: string) => {
     setConfirmModal({
@@ -721,6 +769,56 @@ export default function App() {
     setLocalInspection(prev => prev ? { ...prev, inspectorOpinion: opinion } : null);
     setHasUnsavedChanges(true);
   }, []);
+
+  const updateRevisions = useCallback((revisions: any[]) => {
+    setLocalInspection(prev => prev ? { ...prev, revisions } : null);
+    setHasUnsavedChanges(true);
+  }, []);
+
+  const handleRevisionPhotoUpload = useCallback(async (revisionId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !localInspection) return;
+
+    setLoading(true);
+    setLoadingMessage('Processando fotos da revisão...');
+    try {
+      const revisions = localInspection.revisions || [];
+      const revision = revisions.find(r => r.id === revisionId);
+      const currentPhotos = revision?.photos || [];
+      
+      if (currentPhotos.length + files.length > 10) {
+        showToast('Limite de 10 fotos por revisão atingido.', 'error');
+        if (currentPhotos.length >= 10) return;
+      }
+
+      const newPhotos: string[] = [...currentPhotos];
+      const filesToProcess = Array.from(files).slice(0, 10 - currentPhotos.length) as File[];
+
+      for (const file of filesToProcess) {
+        const reader = new FileReader();
+        const promise = new Promise<string>((resolve) => {
+          reader.onloadend = async () => {
+            const base64String = reader.result as string;
+            const compressedBase64 = await compressImage(base64String);
+            resolve(compressedBase64);
+          };
+        });
+        reader.readAsDataURL(file);
+        const compressed = await promise;
+        newPhotos.push(compressed);
+      }
+
+      const updatedRevisions = revisions.map(r => 
+        r.id === revisionId ? { ...r, photos: newPhotos } : r
+      );
+      updateRevisions(updatedRevisions);
+    } catch (error) {
+      console.error('Error uploading revision photo:', error);
+      showToast('Erro ao processar fotos', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [localInspection, showToast, updateRevisions]);
 
   const updateRoomDetails = useCallback((roomId: string, updates: Partial<Room>) => {
     setLocalRooms(prev => prev.map(r => r.id === roomId ? { ...r, ...updates } : r));
@@ -1074,8 +1172,11 @@ export default function App() {
 
         {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-200 bg-white">
+        <div 
+          className="flex items-center gap-3 cursor-pointer group"
+          onClick={() => setView('home')}
+        >
+          <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-brand-blue/10 group-hover:shadow-md transition-all bg-white flex items-center justify-center p-1">
             <img 
               src={LOGO_URL} 
               alt="Uchi Vistorias Logo" 
@@ -1088,7 +1189,7 @@ export default function App() {
               }}
             />
           </div>
-          <span className="font-bold text-xl tracking-tight">Uchi Vistorias</span>
+          <span className="font-bold text-xl tracking-tight group-hover:text-brand-blue transition-colors">Portal Uchi</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
@@ -1107,15 +1208,176 @@ export default function App() {
 
       <main className="max-w-4xl mx-auto p-6">
         <AnimatePresence mode="wait">
-          {view === 'dashboard' && (
-            <Dashboard 
-              inspections={inspections}
-              onNewInspection={() => setView('new')}
-              onEditInspection={handleEditInspection}
-              onDeleteInspection={deleteInspection}
-              onDuplicateInspection={duplicateInspection}
-              onGenerateReport={generateReport}
+          {view === 'home' && (
+            <HomePage 
+              onSelectInspections={() => setView('dashboard')}
+              onSelectVisits={() => setView('visits')}
             />
+          )}
+
+          {view === 'visits' && (
+            <Visits 
+              onBack={() => setView('home')}
+              onAddProperty={() => {
+                setEditingProperty(null);
+                setView('new-property');
+              }}
+              onEditProperty={(prop) => {
+                setEditingProperty(prop);
+                setView('new-property');
+              }}
+              onDeleteProperty={(id) => deleteProperty(id)}
+              onSelectProperty={(prop) => {
+                setSelectedProperty(prop);
+                setView('property-details');
+              }}
+              properties={properties}
+            />
+          )}
+
+          {view === 'property-details' && selectedProperty && (
+            <PropertyDetails 
+              property={selectedProperty}
+              onBack={() => setView('visits')}
+              onEditProperty={(property) => {
+                setEditingProperty(property);
+                setView('new-property');
+              }}
+              onAddVisit={() => {
+                setEditingVisit(null);
+                setView('new-visit');
+              }}
+              onEditVisit={(visit) => {
+                setEditingVisit(visit);
+                setView('new-visit');
+              }}
+              onDeleteVisit={(visitId) => {
+                setConfirmModal({
+                  isOpen: true,
+                  title: 'Excluir Visita',
+                  message: 'Tem certeza que deseja excluir esta visita?',
+                  confirmText: 'Excluir',
+                  confirmVariant: 'danger',
+                  onConfirm: async () => {
+                    try {
+                      setLoading(true);
+                      await deleteDoc(doc(db, 'properties', selectedProperty.id, 'visits', visitId));
+                      showToast('Visita excluída com sucesso!', 'success');
+                    } catch (error) {
+                      handleFirestoreError(error, OperationType.DELETE, `properties/${selectedProperty.id}/visits/${visitId}`);
+                    } finally {
+                      setLoading(false);
+                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    }
+                  }
+                });
+              }}
+              onVisitFeedback={(visit) => {
+                setEditingVisit(visit);
+                setView('visit-feedback');
+              }}
+            />
+          )}
+
+          {view === 'new-visit' && selectedProperty && (
+            <VisitRegistration 
+              property={selectedProperty}
+              initialData={editingVisit}
+              onBack={() => setView('property-details')}
+              onSave={async (data) => {
+                try {
+                  setLoading(true);
+                  if (editingVisit) {
+                    await updateDoc(doc(db, 'properties', selectedProperty.id, 'visits', editingVisit.id), {
+                      ...data,
+                      updatedAt: serverTimestamp()
+                    });
+                    showToast('Visita atualizada com sucesso!', 'success');
+                  } else {
+                    await addDoc(collection(db, 'properties', selectedProperty.id, 'visits'), {
+                      ...data,
+                      createdAt: serverTimestamp()
+                    });
+                    showToast('Visita adicionada com sucesso!', 'success');
+                  }
+                  setView('property-details');
+                } catch (error) {
+                  handleFirestoreError(error, editingVisit ? OperationType.UPDATE : OperationType.CREATE, `properties/${selectedProperty.id}/visits`);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            />
+          )}
+
+          {view === 'visit-feedback' && selectedProperty && editingVisit && (
+            <VisitFeedback
+              property={selectedProperty}
+              visit={editingVisit}
+              onBack={() => setView('property-details')}
+              onSave={async (feedback) => {
+                try {
+                  setLoading(true);
+                  await updateDoc(doc(db, 'properties', selectedProperty.id, 'visits', editingVisit.id), {
+                    feedback,
+                    updatedAt: serverTimestamp()
+                  });
+                  showToast('Feedback salvo com sucesso!', 'success');
+                  setView('property-details');
+                } catch (error) {
+                  handleFirestoreError(error, OperationType.UPDATE, `properties/${selectedProperty.id}/visits/${editingVisit.id}`);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            />
+          )}
+
+          {view === 'new-property' && (
+            <PropertyRegistration 
+              onBack={() => setView('visits')}
+              initialData={editingProperty}
+              onSave={async (data) => {
+                try {
+                  setLoading(true);
+                  if (editingProperty) {
+                    const { id, ...updateData } = data;
+                    await updateDoc(doc(db, 'properties', id), {
+                      ...updateData,
+                      updatedAt: serverTimestamp()
+                    });
+                    showToast('Imóvel atualizado com sucesso!', 'success');
+                  } else {
+                    await addDoc(collection(db, 'properties'), {
+                      ...data,
+                      createdAt: serverTimestamp()
+                    });
+                    showToast('Imóvel cadastrado com sucesso!', 'success');
+                  }
+                  setView('visits');
+                } catch (error) {
+                  handleFirestoreError(error, editingProperty ? OperationType.UPDATE : OperationType.CREATE, 'properties');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            />
+          )}
+
+          {view === 'dashboard' && (
+            <div className="space-y-6">
+              <div className="flex justify-start">
+                <Button variant="secondary" onClick={() => setView('home')} icon={ArrowLeft}>Voltar ao Início</Button>
+              </div>
+              <Dashboard 
+                inspections={inspections}
+                onNewInspection={() => setView('new')}
+                onEditInspection={handleEditInspection}
+                onDeleteInspection={deleteInspection}
+                onDuplicateInspection={duplicateInspection}
+                onGenerateReport={generateReport}
+              />
+            </div>
           )}
 
           {view === 'new' && (
@@ -1161,6 +1423,8 @@ export default function App() {
               }}
               onUpdatePropertyDescription={updatePropertyDescription}
               onUpdateInspectorOpinion={updateInspectorOpinion}
+              onUpdateRevisions={updateRevisions}
+              onRevisionPhotoUpload={handleRevisionPhotoUpload}
               onAddRoom={addRoom}
               onSetIsAddingRoom={setIsAddingRoom}
               onSetNewRoomName={setNewRoomName}

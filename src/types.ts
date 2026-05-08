@@ -8,11 +8,50 @@ export interface Person {
 }
 
 export interface Property {
+  id: string;
   address: string;
+  number: string;
   complement?: string;
   neighborhood: string;
   city: string;
   cep: string;
+  ownerName: string;
+  ownerPhone: string;
+}
+
+export interface VisitFeedbackData {
+  propertySize: { rating: number; observation: string };
+  roomLayout: { rating: number; observation: string };
+  furniture: { rating: number; observation: string };
+  appliances: { rating: number; observation: string };
+  lighting: { rating: number; observation: string };
+  parking: { rating: number; observation: string };
+  price: { rating: number; observation: string };
+  propertyQualities?: string;
+  propertyDefects?: string;
+  generalObservations?: string;
+}
+
+export interface PropertyVisit {
+  id: string;
+  propertyId: string;
+  visitorName: string;
+  visitorPhone: string;
+  brokerName: string;
+  interest: 'compra' | 'locação';
+  visitDate: string;
+  visitTime: string;
+  createdAt: any;
+  feedback?: VisitFeedbackData;
+}
+
+export interface Revision {
+  id: string;
+  title: string;
+  date: string;
+  reason: string;
+  comments: string;
+  photos: string[];
 }
 
 export interface Inspection {
@@ -32,6 +71,7 @@ export interface Inspection {
   seller?: Person; // For venda
   propertyDescription?: string;
   inspectorOpinion?: string;
+  revisions?: Revision[];
 }
 
 export interface Room {

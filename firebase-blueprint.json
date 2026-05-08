@@ -87,11 +87,46 @@
         "photos": { "type": "array", "items": { "type": "string" }, "description": "List of photo URLs (base64 for now)" }
       },
       "required": ["roomId", "name", "condition"]
+    },
+    "Property": {
+      "title": "Property",
+      "description": "A property record.",
+      "type": "object",
+      "properties": {
+        "address": { "type": "string" },
+        "number": { "type": "string" },
+        "complement": { "type": "string" },
+        "neighborhood": { "type": "string" },
+        "city": { "type": "string" },
+        "cep": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "ownerPhone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["address", "number", "neighborhood", "city", "cep", "ownerName", "ownerPhone"]
+    },
+    "PropertyVisit": {
+      "title": "PropertyVisit",
+      "description": "A visit record for a property.",
+      "type": "object",
+      "properties": {
+        "propertyId": { "type": "string" },
+        "visitorName": { "type": "string" },
+        "visitorPhone": { "type": "string" },
+        "brokerName": { "type": "string" },
+        "interest": { "type": "string", "enum": ["compra", "locação"] },
+        "visitDate": { "type": "string" },
+        "visitTime": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["propertyId", "visitorName", "visitorPhone", "brokerName", "interest", "visitDate", "visitTime"]
     }
   },
   "firestore": {
     "/inspections/{inspectionId}": { "schema": "Inspection", "description": "Main inspection records" },
     "/inspections/{inspectionId}/rooms/{roomId}": { "schema": "Room", "description": "Rooms in an inspection" },
-    "/inspections/{inspectionId}/rooms/{roomId}/items/{itemId}": { "schema": "Item", "description": "Items in a room" }
+    "/inspections/{inspectionId}/rooms/{roomId}/items/{itemId}": { "schema": "Item", "description": "Items in a room" },
+    "/properties/{propertyId}": { "schema": "Property", "description": "Registered properties" },
+    "/properties/{propertyId}/visits/{visitId}": { "schema": "PropertyVisit", "description": "Visits to a property" }
   }
 }

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Button, Card, Badge } from './UI';
-import { Inspection, Room, Item, ItemCondition, InspectionStatus } from '../types';
+import { Inspection, Room, Item, ItemCondition, InspectionStatus, Revision } from '../types';
 
 interface InspectionEditProps {
   localInspection: Inspection;
@@ -50,6 +50,8 @@ interface InspectionEditProps {
   onUpdateStatus: (status: InspectionStatus) => void;
   onUpdatePropertyDescription: (desc: string) => void;
   onUpdateInspectorOpinion: (opinion: string) => void;
+  onUpdateRevisions: (revisions: Revision[]) => void;
+  onRevisionPhotoUpload: (revisionId: string, e: React.ChangeEvent<HTMLInputElement>) => void;
   
   onAddRoom: () => void;
   onSetIsAddingRoom: (val: boolean) => void;
@@ -103,6 +105,8 @@ const InspectionEdit: React.FC<InspectionEditProps> = ({
   onUpdateStatus,
   onUpdatePropertyDescription,
   onUpdateInspectorOpinion,
+  onUpdateRevisions,
+  onRevisionPhotoUpload,
   
   onAddRoom,
   onSetIsAddingRoom,
@@ -220,6 +224,163 @@ const InspectionEdit: React.FC<InspectionEditProps> = ({
           onChange={(e) => onUpdateInspectorOpinion(e.target.value)}
           className="w-full p-4 rounded-2xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[120px] bg-zinc-50/50"
         />
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-sm space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-zinc-500 uppercase text-xs font-bold tracking-widest">
+            <ClipboardList size={14} />
+            <span>Controle de Revisões</span>
+          </div>
+          <Button 
+            variant="secondary" 
+            icon={Plus} 
+            onClick={() => {
+              const currentRevisions = localInspection.revisions || [];
+              const nextNum = currentRevisions.length + 1;
+              const newRevision: Revision = {
+                id: `rev-${Date.now()}`,
+                title: `Revisão ${nextNum}`,
+                date: new Date().toISOString().split('T')[0],
+                reason: '',
+                comments: '',
+                photos: []
+              };
+              onUpdateRevisions([...currentRevisions, newRevision]);
+            }}
+            className="text-xs py-1 px-3"
+          >
+            Adicionar Revisão
+          </Button>
+        </div>
+
+        {(!localInspection.revisions || localInspection.revisions.length === 0) ? (
+          <div className="text-center py-8 border-2 border-dashed border-zinc-100 rounded-2xl">
+            <p className="text-zinc-400 text-sm italic">Nenhuma revisão registrada.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {localInspection.revisions.map((rev, idx) => (
+              <Card key={rev.id} className="p-5 bg-zinc-50/50 border-zinc-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-bold text-brand-blue flex items-center gap-2">
+                    <div className="w-6 h-6 bg-brand-blue/10 rounded-full flex items-center justify-center text-[10px]">
+                      {idx + 1}
+                    </div>
+                    {rev.title}
+                  </h4>
+                  <button 
+                    onClick={() => {
+                      const newRevisions = localInspection.revisions?.filter(r => r.id !== rev.id) || [];
+                      // Re-index titles to keep them sequential
+                      const reindexed = newRevisions.map((r, i) => ({
+                        ...r,
+                        title: `Revisão ${i + 1}`
+                      }));
+                      onUpdateRevisions(reindexed);
+                    }}
+                    className="p-1.5 text-zinc-400 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Data da Revisão</label>
+                      <input
+                        type="date"
+                        value={rev.date}
+                        onChange={(e) => {
+                          const newRevisions = localInspection.revisions?.map(r => 
+                            r.id === rev.id ? { ...r, date: e.target.value } : r
+                          ) || [];
+                          onUpdateRevisions(newRevisions);
+                        }}
+                        className="w-full p-3 rounded-xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-xs bg-white font-bold"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Motivo da Revisão</label>
+                      <input
+                        placeholder="Ex: Correção de pintura, Substituição..."
+                        value={rev.reason}
+                        onChange={(e) => {
+                          const newRevisions = localInspection.revisions?.map(r => 
+                            r.id === rev.id ? { ...r, reason: e.target.value } : r
+                          ) || [];
+                          onUpdateRevisions(newRevisions);
+                        }}
+                        className="w-full p-3 rounded-xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-xs bg-white font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Comentários</label>
+                    <textarea
+                      placeholder="Adicione os comentários desta revisão..."
+                      value={rev.comments}
+                      onChange={(e) => {
+                        const newRevisions = localInspection.revisions?.map(r => 
+                          r.id === rev.id ? { ...r, comments: e.target.value } : r
+                        ) || [];
+                        onUpdateRevisions(newRevisions);
+                      }}
+                      className="w-full p-3 rounded-xl border border-zinc-200 focus:ring-1 focus:ring-brand-blue outline-none text-sm min-h-[80px] bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Fotos da Revisão</label>
+                      <label className="cursor-pointer">
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          multiple
+                          className="hidden" 
+                          onChange={(e) => onRevisionPhotoUpload(rev.id, e)} 
+                        />
+                        <div className="flex items-center gap-1 text-[10px] font-black text-brand-blue hover:underline uppercase tracking-wider">
+                          <Camera size={12} />
+                          Adicionar Fotos
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                      {rev.photos.map((photo, pIdx) => (
+                        <div key={pIdx} className="relative aspect-square rounded-lg overflow-hidden border border-zinc-200 group">
+                          <img src={photo} alt={`Revision ${idx + 1}`} className="w-full h-full object-cover" />
+                          <button 
+                            onClick={() => {
+                              const newPhotos = [...rev.photos];
+                              newPhotos.splice(pIdx, 1);
+                              const newRevisions = localInspection.revisions?.map(r => 
+                                r.id === rev.id ? { ...r, photos: newPhotos } : r
+                              ) || [];
+                              onUpdateRevisions(newRevisions);
+                            }}
+                            className="absolute top-1 right-1 bg-red-500/80 text-white p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                      {rev.photos.length === 0 && (
+                        <div className="col-span-full py-4 text-center border border-dashed border-zinc-200 rounded-lg text-[10px] text-zinc-400 font-bold uppercase tracking-widest">
+                          Nenhuma foto adicionada
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid md:grid-cols-3 gap-8">

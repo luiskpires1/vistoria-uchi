@@ -23,8 +23,11 @@ export const Button = React.memo(({ children, onClick, variant = 'primary', clas
   );
 });
 
-export const Card = React.memo(({ children, className = '' }: any) => (
-  <div className={`bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden ${className}`}>
+export const Card = React.memo(({ children, className = '', ...props }: any) => (
+  <div 
+    {...props}
+    className={`bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden ${className}`}
+  >
     {children}
   </div>
 ));
