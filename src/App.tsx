@@ -1315,20 +1315,31 @@ export default function App() {
               property={selectedProperty}
               visit={editingVisit}
               onBack={() => setView('property-details')}
+              isSaving={isSaving}
               onSave={async (feedback) => {
-                try {
-                  setLoading(true);
-                  await updateDoc(doc(db, 'properties', selectedProperty.id, 'visits', editingVisit.id), {
-                    feedback,
-                    updatedAt: serverTimestamp()
-                  });
-                  showToast('Feedback salvo com sucesso!', 'success');
-                  setView('property-details');
-                } catch (error) {
-                  handleFirestoreError(error, OperationType.UPDATE, `properties/${selectedProperty.id}/visits/${editingVisit.id}`);
-                } finally {
-                  setLoading(false);
-                }
+                setConfirmModal({
+                  isOpen: true,
+                  title: 'Salvar Feedback',
+                  message: 'Deseja salvar o feedback desta visita?',
+                  confirmText: 'Salvar',
+                  confirmVariant: 'primary',
+                  onConfirm: async () => {
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    try {
+                      setLoading(true);
+                      await updateDoc(doc(db, 'properties', selectedProperty.id, 'visits', editingVisit.id), {
+                        feedback,
+                        updatedAt: serverTimestamp()
+                      });
+                      showToast('Feedback salvo com sucesso!', 'success');
+                      setView('property-details');
+                    } catch (error) {
+                      handleFirestoreError(error, OperationType.UPDATE, `properties/${selectedProperty.id}/visits/${editingVisit.id}`);
+                    } finally {
+                      setLoading(false);
+                    }
+                  }
+                });
               }}
             />
           )}

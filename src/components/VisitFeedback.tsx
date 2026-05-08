@@ -9,6 +9,7 @@ interface VisitFeedbackProps {
   visit: PropertyVisit;
   onBack: () => void;
   onSave: (feedback: VisitFeedbackData) => void;
+  isSaving?: boolean;
 }
 
 const questions = [
@@ -21,7 +22,7 @@ const questions = [
   { id: 'price', label: 'Preço' },
 ] as const;
 
-const VisitFeedback: React.FC<VisitFeedbackProps> = ({ property, visit, onBack, onSave }) => {
+const VisitFeedback: React.FC<VisitFeedbackProps> = ({ property, visit, onBack, onSave, isSaving }) => {
   const [feedback, setFeedback] = useState<VisitFeedbackData>(() => {
     const defaultFeedback: VisitFeedbackData = {
       propertySize: { rating: 0, observation: '' },
@@ -162,13 +163,14 @@ const VisitFeedback: React.FC<VisitFeedbackProps> = ({ property, visit, onBack, 
           </div>
         </Card>
 
-        <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-zinc-200 flex justify-center z-50">
           <Button 
             type="submit"
-            className="w-full max-w-md h-14 rounded-2xl bg-brand-blue text-white shadow-xl hover:bg-brand-blue/90 transition-all flex items-center justify-center gap-2 pointer-events-auto"
+            className="w-full max-w-md py-4 shadow-xl shadow-black/10"
+            icon={Save}
+            disabled={isSaving}
           >
-            <Save size={20} />
-            Salvar Feedback
+            {isSaving ? 'Salvando...' : 'Salvar Feedback'}
           </Button>
         </div>
       </form>
