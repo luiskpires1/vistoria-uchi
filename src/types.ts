@@ -7,6 +7,12 @@ export interface Person {
   cpf: string;
 }
 
+export interface PriceHistory {
+  id: string;
+  value: number;
+  date: string;
+}
+
 export interface Property {
   id: string;
   address: string;
@@ -17,6 +23,7 @@ export interface Property {
   cep: string;
   ownerName: string;
   ownerPhone: string;
+  priceHistory?: PriceHistory[];
 }
 
 export interface VisitFeedbackData {
@@ -37,6 +44,7 @@ export interface PropertyVisit {
   propertyId: string;
   visitorName: string;
   visitorPhone: string;
+  leadSource?: string;
   brokerName: string;
   interest: 'compra' | 'locação';
   visitDate: string;

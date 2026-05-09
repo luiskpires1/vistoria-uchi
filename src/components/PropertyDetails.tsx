@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, MapPin, Phone, User, Calendar, Plus, Clock, Briefcase, Info, Pencil, Trash2, ArrowRight, FileText } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, User, Calendar, Plus, Clock, Briefcase, Info, Pencil, Trash2, ArrowRight, FileText, DollarSign } from 'lucide-react';
 import { Button, Card, Badge } from './UI';
-import { Property, PropertyVisit } from '../types';
+import { Property, PropertyVisit, PriceHistory } from '../types';
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { generateVisitPDF, generateVisitsSummaryPDF } from '../services/pdfService';
@@ -15,6 +15,8 @@ interface PropertyDetailsProps {
   onEditVisit: (visit: PropertyVisit) => void;
   onDeleteVisit: (visitId: string) => void;
   onVisitFeedback: (visit: PropertyVisit) => void;
+  onAddPriceHistory: (propertyId: string, value: number, date: string) => void;
+  onDeletePriceHistory: (propertyId: string, historyId: string) => void;
 }
 
 const PropertyDetails: React.FC<PropertyDetailsProps> = ({ 
@@ -24,12 +26,17 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({
   onAddVisit, 
   onEditVisit, 
   onDeleteVisit,
-  onVisitFeedback
+  onVisitFeedback,
+  onAddPriceHistory,
+  onDeletePriceHistory
 }) => {
   const [visits, setVisits] = useState<PropertyVisit[]>([]);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [newPrice, setNewPrice] = useState<string>('');
+  const [newPriceDate, setNewPriceDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [isAddingPrice, setIsAddingPrice] = useState(false);
 
   const handleGeneratePDF = async (visit: PropertyVisit) => {
     try {
@@ -54,7 +61,7 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({
       return;
     }
 
-    generateVisitsSummaryPDF(property, filteredVisits);
+    generateVisitsSummaryPDF(property, filteredVisits, startDate, endDate);
   };
 
   useEffect(() => {
@@ -143,6 +150,115 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({
               </Button>
             </div>
           </div>
+        </div>
+      </Card>
+
+      <Card className="p-6 border border-zinc-100 shadow-sm space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-brand-blue/10 rounded-lg flex items-center justify-center text-brand-blue">
+              <DollarSign size={18} />
+            </div>
+            <h3 className="font-bold text-zinc-900 uppercase text-xs tracking-widest">Histórico de Preço</h3>
+          </div>
+          <Button 
+            variant="secondary" 
+            icon={Plus} 
+            size="sm" 
+            onClick={() => setIsAddingPrice(!isAddingPrice)}
+            className="text-xs font-bold"
+          >
+            {isAddingPrice ? 'Cancelar' : 'Adicionar Registro'}
+          </Button>
+        </div>
+
+        {isAddingPrice && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200 space-y-4"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Valor (R$)</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-sm">R$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0,00"
+                    value={newPrice}
+                    onChange={(e) => setNewPrice(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Data</label>
+                <input
+                  type="date"
+                  value={newPriceDate}
+                  onChange={(e) => setNewPriceDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-brand-blue/20"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button 
+                onClick={() => {
+                  if (newPrice && newPriceDate) {
+                    onAddPriceHistory(property.id, parseFloat(newPrice), newPriceDate);
+                    setNewPrice('');
+                    setIsAddingPrice(false);
+                  }
+                }}
+                disabled={!newPrice || !newPriceDate}
+                className="px-6"
+              >
+                Salvar Preço
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        <div className="overflow-hidden rounded-2xl border border-zinc-100">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-zinc-50 text-[10px] font-black text-zinc-400 uppercase tracking-widest border-b border-zinc-100">
+              <tr>
+                <th className="px-6 py-4">Data</th>
+                <th className="px-6 py-4">Valor</th>
+                <th className="px-6 py-4 text-right">Ação</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-zinc-50">
+              {(!property.priceHistory || property.priceHistory.length === 0) ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-8 text-center text-zinc-400 italic text-xs">
+                    Nenhum histórico de preço registrado.
+                  </td>
+                </tr>
+              ) : (
+                [...property.priceHistory].sort((a,b) => b.date.localeCompare(a.date)).map((history) => (
+                  <tr key={history.id} className="hover:bg-zinc-50/50 transition-colors">
+                    <td className="px-6 py-4 font-bold text-zinc-600">
+                      {new Date(history.date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                    </td>
+                    <td className="px-6 py-4 font-black text-brand-blue">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(history.value)}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button 
+                        onClick={() => onDeletePriceHistory(property.id, history.id)}
+                        className="p-2 text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </Card>
 

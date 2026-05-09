@@ -15,6 +15,7 @@ const VisitRegistration: React.FC<VisitRegistrationProps> = ({ property, initial
   const [formData, setFormData] = useState({
     visitorName: initialData?.visitorName || '',
     visitorPhone: initialData?.visitorPhone || '',
+    leadSource: initialData?.leadSource || '',
     brokerName: initialData?.brokerName || '',
     interest: initialData?.interest || 'compra',
     visitDate: initialData?.visitDate || new Date().toISOString().split('T')[0],
@@ -88,6 +89,24 @@ const VisitRegistration: React.FC<VisitRegistrationProps> = ({ property, initial
               onChange={handleChange}
               required
             />
+
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-zinc-700">Fonte do Lead</label>
+              <select
+                name="leadSource"
+                value={formData.leadSource}
+                onChange={handleChange}
+                className="w-full px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all outline-none"
+                required
+              >
+                <option value="">Selecione uma opção</option>
+                <option value="Grupo ZAP">Grupo ZAP</option>
+                <option value="Tráfego Pago">Tráfego Pago</option>
+                <option value="Relacionamento Corretor">Relacionamento Corretor</option>
+                <option value="Quinto Andar">Quinto Andar</option>
+                <option value="Foxter">Foxter</option>
+              </select>
+            </div>
           </div>
 
           <div className="space-y-4 pt-4">

@@ -732,7 +732,15 @@ export const generateVisitPDF = async (property: any, visit: any) => {
   doc.setTextColor(50, 50, 50);
   doc.text(`Visitante: ${visit.visitorName}`, margin + 5, currentY);
   currentY += LINE_HEIGHT;
+  doc.text(`Telefone: ${visit.visitorPhone}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  if (visit.leadSource) {
+    doc.text(`Fonte do Lead: ${visit.leadSource}`, margin + 5, currentY);
+    currentY += LINE_HEIGHT;
+  }
   doc.text(`Corretor: ${visit.brokerName}`, margin + 5, currentY);
+  currentY += LINE_HEIGHT;
+  doc.text(`Interesse: ${visit.interest === 'compra' ? 'Compra' : 'Locação'}`, margin + 5, currentY);
   currentY += LINE_HEIGHT;
   doc.text(`Data: ${new Date(visit.visitDate + 'T00:00:00').toLocaleDateString('pt-BR')} - Hora: ${visit.visitTime}`, margin + 5, currentY);
   currentY += SECTION_GAP;
@@ -839,7 +847,7 @@ export const generateVisitPDF = async (property: any, visit: any) => {
   doc.save(`relatorio-visita-${visit.visitorName.replace(/\s+/g, '-').toLowerCase()}.pdf`);
 };
 
-export const generateVisitsSummaryPDF = async (property: any, visits: any[]) => {
+export const generateVisitsSummaryPDF = async (property: any, visits: any[], startDate?: string, endDate?: string) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -903,7 +911,14 @@ export const generateVisitsSummaryPDF = async (property: any, visits: any[]) => 
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 55, { align: 'center' });
+  
+  let subtitle = `Gerado em: ${new Date().toLocaleString('pt-BR')}`;
+  if (startDate || endDate) {
+    const start = startDate ? new Date(startDate + 'T12:00:00').toLocaleDateString('pt-BR') : 'Início';
+    const end = endDate ? new Date(endDate + (endDate.includes('T') ? '' : 'T12:00:00')).toLocaleDateString('pt-BR') : 'Hoje';
+    subtitle += ` | Período: ${start} até ${end}`;
+  }
+  doc.text(subtitle, pageWidth / 2, 55, { align: 'center' });
 
   let currentY = 70;
 
@@ -920,8 +935,73 @@ export const generateVisitsSummaryPDF = async (property: any, visits: any[]) => 
   const visitsWithFeedback = visits.filter(v => v.feedback);
 
   if (visitsWithFeedback.length > 0) {
-    currentY = drawSectionHeader('RESUMO DAS AVALIAÇÕES', currentY);
+    currentY = drawSectionHeader('HISTÓRICO DE PREÇO', currentY);
     
+    // Average Visits per Price Table
+    const sortedPriceHistory = [...(property.priceHistory || [])].sort((a, b) => a.date.localeCompare(b.date));
+    
+    if (sortedPriceHistory.length > 0) {
+      const statsData = sortedPriceHistory.map((history, index) => {
+        const startDate = new Date(history.date + 'T12:00:00');
+        const nextDateStr = sortedPriceHistory[index + 1]?.date;
+        const endDate = nextDateStr ? new Date(nextDateStr + 'T12:00:00') : new Date();
+        if (!nextDateStr) endDate.setHours(12, 0, 0, 0);
+        
+        // Duration in weeks
+        const diffTime = Math.max(endDate.getTime() - startDate.getTime(), 0);
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        const diffWeeks = Math.max(diffDays / 7, 1); // Minimum 1 week to avoid division by zero or infinite
+        
+        // Count visits in this period
+        const periodVisits = visits.filter(v => {
+          const vd = v.visitDate;
+          return vd >= history.date && (!nextDateStr || vd < nextDateStr);
+        }).length;
+
+        const avgPerWeek = periodVisits / diffWeeks;
+        
+        const periodStr = `${startDate.toLocaleDateString('pt-BR')} - ${nextDateStr ? new Date(nextDateStr + 'T12:00:00').toLocaleDateString('pt-BR') : 'Atual'}`;
+        const priceStr = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(history.value);
+
+        return [
+          priceStr,
+          periodStr,
+          periodVisits.toString(),
+          avgPerWeek.toFixed(2).replace('.', ',')
+        ];
+      });
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Valor do Imóvel', 'Período', 'Total de Visitas', 'Média Visitas/Semana']],
+        body: statsData,
+        theme: 'striped',
+        headStyles: { fillColor: [0, 58, 90], textColor: 'white', fontSize: 10 },
+        bodyStyles: { fontSize: 10 },
+        margin: { left: margin, right: margin },
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + SECTION_GAP;
+    } else {
+      currentY += 10;
+    }
+
+    currentY = drawSectionHeader('RESUMO DAS VISITAS', currentY);
+
+    // Calculate display period
+    const sortedPrices = [...(property.priceHistory || [])].sort((a, b) => a.date.localeCompare(b.date));
+    const displayStart = startDate || (sortedPrices.length > 0 ? sortedPrices[0].date : null);
+    const displayEnd = endDate || new Date().toISOString().split('T')[0];
+
+    const startText = displayStart ? new Date(displayStart + 'T12:00:00').toLocaleDateString('pt-BR') : 'Início';
+    const endText = new Date(displayEnd + (displayEnd.includes('T') ? '' : 'T12:00:00')).toLocaleDateString('pt-BR');
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Período da análise: ${startText} até ${endText}`, margin + 5, currentY);
+    currentY += LINE_HEIGHT;
+
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(50, 50, 50);
@@ -968,7 +1048,11 @@ export const generateVisitsSummaryPDF = async (property: any, visits: any[]) => 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(80, 80, 80);
-      doc.text(`Data: ${new Date(visit.visitDate + 'T00:00:00').toLocaleDateString('pt-BR')} | Hora: ${visit.visitTime} | Corretor: ${visit.brokerName}`, margin + 5, currentY);
+      let visitInfo = `Data: ${new Date(visit.visitDate + 'T00:00:00').toLocaleDateString('pt-BR')} | Hora: ${visit.visitTime} | Corretor: ${visit.brokerName}`;
+      if (visit.leadSource) {
+        visitInfo += ` | Fonte: ${visit.leadSource}`;
+      }
+      doc.text(visitInfo, margin + 5, currentY);
       currentY += 10;
 
       const questions = [

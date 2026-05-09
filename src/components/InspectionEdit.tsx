@@ -47,6 +47,7 @@ interface InspectionEditProps {
   onGenerateReport: (ins: Inspection) => void;
   onDeleteInspection: (id: string) => void;
   onEditProperty: () => void;
+  onEditInspectionData: () => void;
   onUpdateStatus: (status: InspectionStatus) => void;
   onUpdatePropertyDescription: (desc: string) => void;
   onUpdateInspectorOpinion: (opinion: string) => void;
@@ -102,6 +103,7 @@ const InspectionEdit: React.FC<InspectionEditProps> = ({
   onGenerateReport,
   onDeleteInspection,
   onEditProperty,
+  onEditInspectionData,
   onUpdateStatus,
   onUpdatePropertyDescription,
   onUpdateInspectorOpinion,
@@ -185,18 +187,23 @@ const InspectionEdit: React.FC<InspectionEditProps> = ({
               <span>Editar Dados do Imóvel</span>
             </button>
 
-            <div className="flex items-center gap-2 mt-2">
-              <div className="p-1.5 bg-zinc-100 rounded-lg">
-                <ClipboardList size={12} className="text-zinc-500" />
+            <button 
+              onClick={onEditInspectionData} 
+              className="flex items-center gap-1.5 text-brand-blue hover:text-brand-blue/80 transition-colors text-xs font-bold uppercase tracking-wider"
+            >
+              <div className="p-1.5 bg-brand-blue/10 rounded-lg">
+                <ClipboardList size={12} />
               </div>
-              <select 
-                value={localInspection.status}
-                onChange={(e) => onUpdateStatus(e.target.value as any)}
-                className="bg-transparent text-xs font-bold uppercase tracking-wider text-zinc-600 outline-none cursor-pointer hover:text-brand-blue transition-colors"
-              >
-                <option value="draft">Em andamento</option>
-                <option value="completed">Finalizada</option>
-              </select>
+              <span>Editar Dados da Vistoria</span>
+            </button>
+
+            <div className="flex items-center gap-2 mt-1">
+              <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest px-2 py-1 bg-zinc-100 rounded-lg text-zinc-500">
+                Status: {localInspection.status === 'completed' ? 'Finalizada' : 'Em andamento'}
+              </div>
+              <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest px-2 py-1 bg-zinc-100 rounded-lg text-zinc-500">
+                Data: {new Date(localInspection.date).toLocaleDateString('pt-BR')}
+              </div>
             </div>
           </div>
         </div>

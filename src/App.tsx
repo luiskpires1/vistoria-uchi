@@ -178,6 +178,7 @@ export default function App() {
   const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [isEditingProperty, setIsEditingProperty] = useState(false);
+  const [isEditingInspectionData, setIsEditingInspectionData] = useState(false);
   const [localInspection, setLocalInspection] = useState<Inspection | null>(null);
   const [localRooms, setLocalRooms] = useState<Room[]>([]);
   const [localItems, setLocalItems] = useState<{ [roomId: string]: Item[] }>({});
@@ -698,6 +699,27 @@ export default function App() {
     showToast('Dados atualizados localmente. Clique em Salvar para persistir.', 'info');
   }, [localInspection, showToast]);
 
+  const handleUpdateInspectionData = useCallback((e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!localInspection) return;
+
+    const formData = new FormData(e.currentTarget);
+    const type = formData.get('type') as InspectionType;
+    const status = formData.get('status') as InspectionStatus;
+    const date = formData.get('date') as string;
+
+    setLocalInspection({
+      ...localInspection,
+      type,
+      status,
+      date: new Date(date + 'T12:00:00').toISOString()
+    });
+
+    setIsEditingInspectionData(false);
+    setHasUnsavedChanges(true);
+    showToast('Dados da vistoria atualizados localmente. Clique em Salvar para persistir.', 'info');
+  }, [localInspection, showToast]);
+
   const addRoom = useCallback(() => {
     if (!localInspection || !newRoomName.trim()) return;
 
@@ -819,6 +841,54 @@ export default function App() {
       setLoading(false);
     }
   }, [localInspection, showToast, updateRevisions]);
+
+  const addPriceHistory = useCallback(async (propertyId: string, value: number, date: string) => {
+    try {
+      setLoading(true);
+      const property = properties.find(p => p.id === propertyId);
+      if (!property) return;
+
+      const newHistory = {
+        id: `price-${Date.now()}`,
+        value,
+        date
+      };
+
+      const updatedHistory = [...(property.priceHistory || []), newHistory];
+      await updateDoc(doc(db, 'properties', propertyId), {
+        priceHistory: updatedHistory,
+        updatedAt: serverTimestamp()
+      });
+      showToast('Preço registrado com sucesso!', 'success');
+      // Update selectedProperty to reflect changes immediately
+      setSelectedProperty(prev => prev ? { ...prev, priceHistory: updatedHistory } : null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `properties/${propertyId}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [properties, showToast]);
+
+  const deletePriceHistory = useCallback(async (propertyId: string, historyId: string) => {
+    try {
+      setLoading(true);
+      const property = properties.find(p => p.id === propertyId);
+      if (!property) return;
+
+      const updatedHistory = (property.priceHistory || []).filter(h => h.id !== historyId);
+      await updateDoc(doc(db, 'properties', propertyId), {
+        priceHistory: updatedHistory,
+        updatedAt: serverTimestamp()
+      });
+      showToast('Registro de preço excluído!', 'info');
+      // Update selectedProperty to reflect changes immediately
+      setSelectedProperty(prev => prev ? { ...prev, priceHistory: updatedHistory } : null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `properties/${propertyId}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [properties, showToast]);
 
   const updateRoomDetails = useCallback((roomId: string, updates: Partial<Room>) => {
     setLocalRooms(prev => prev.map(r => r.id === roomId ? { ...r, ...updates } : r));
@@ -1276,6 +1346,8 @@ export default function App() {
                 setEditingVisit(visit);
                 setView('visit-feedback');
               }}
+              onAddPriceHistory={addPriceHistory}
+              onDeletePriceHistory={deletePriceHistory}
             />
           )}
 
@@ -1428,6 +1500,7 @@ export default function App() {
               onGenerateReport={generateReport}
               onDeleteInspection={deleteInspection}
               onEditProperty={() => setIsEditingProperty(true)}
+              onEditInspectionData={() => setIsEditingInspectionData(true)}
               onUpdateStatus={(status) => {
                 setLocalInspection(prev => prev ? { ...prev, status } : null);
                 setHasUnsavedChanges(true);
@@ -1613,6 +1686,58 @@ export default function App() {
             />
           )}
         </AnimatePresence>
+
+        <Modal
+          isOpen={isEditingInspectionData}
+          onClose={() => setIsEditingInspectionData(false)}
+          title="Editar Dados da Vistoria"
+        >
+          {localInspection && (
+            <form onSubmit={handleUpdateInspectionData} className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-zinc-700">Tipo de Vistoria</label>
+                  <Select 
+                    name="type"
+                    defaultValue={localInspection.type}
+                    options={[
+                      { value: 'entrada', label: 'Vistoria de Entrada' },
+                      { value: 'saida', label: 'Vistoria de Saída' },
+                      { value: 'rotina', label: 'Vistoria de Rotina' },
+                      { value: 'venda', label: 'Vistoria de Venda' },
+                    ]}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-zinc-700">Status</label>
+                  <Select 
+                    name="status"
+                    defaultValue={localInspection.status}
+                    options={[
+                      { value: 'draft', label: 'Em andamento' },
+                      { value: 'completed', label: 'Finalizada' },
+                    ]}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-zinc-700">Data da Vistoria</label>
+                  <input 
+                    name="date" 
+                    type="date"
+                    required 
+                    defaultValue={localInspection.date ? localInspection.date.split('T')[0] : new Date().toISOString().split('T')[0]} 
+                    className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-1 focus:ring-brand-blue font-sans" 
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-zinc-100">
+                <Button variant="ghost" type="button" onClick={() => setIsEditingInspectionData(false)}>Cancelar</Button>
+                <Button type="submit">Salvar Alterações</Button>
+              </div>
+            </form>
+          )}
+        </Modal>
 
         <Modal 
           isOpen={confirmModal.isOpen} 
