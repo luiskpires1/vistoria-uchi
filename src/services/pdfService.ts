@@ -1043,6 +1043,11 @@ export const generateVisitsSummaryPDF = async (property: any, visits: any[], sta
     doc.text('Não há visitas com feedback cadastrado para este imóvel.', margin + 5, currentY);
   } else {
     visitsWithFeedback.forEach((visit, index) => {
+      // Estimate minimum height for a visit block (header + info + head of table)
+      // Visita header (10) + info line (10) + small buffer (10) + head of table (10) = 40
+      const minVisitHeight = 40;
+      currentY = checkPageBreak(minVisitHeight, currentY);
+
       currentY = drawSectionHeader(`VISITA ${index + 1} - ${visit.visitorName}`, currentY);
       
       doc.setFontSize(10);
@@ -1084,34 +1089,49 @@ export const generateVisitsSummaryPDF = async (property: any, visits: any[], sta
 
       if (visit.feedback.propertyQualities || visit.feedback.propertyDefects || visit.feedback.generalObservations) {
         if (visit.feedback.propertyQualities) {
+          const txt = doc.splitTextToSize(visit.feedback.propertyQualities, contentWidth - 35);
+          const blockHeight = (txt.length * 4) + 5;
+          currentY = checkPageBreak(blockHeight, currentY);
+          
           doc.setFontSize(10);
           doc.setFont('helvetica', 'bold');
+          doc.setTextColor(0, 58, 90);
           doc.text('Qualidades:', margin + 5, currentY);
           doc.setFont('helvetica', 'normal');
-          const txt = doc.splitTextToSize(visit.feedback.propertyQualities, contentWidth - 35);
+          doc.setTextColor(50, 50, 50);
           doc.text(txt, margin + 30, currentY);
-          currentY += (txt.length * 4) + 2;
+          currentY += blockHeight;
         }
         if (visit.feedback.propertyDefects) {
+          const txt = doc.splitTextToSize(visit.feedback.propertyDefects, contentWidth - 35);
+          const blockHeight = (txt.length * 4) + 5;
+          currentY = checkPageBreak(blockHeight, currentY);
+
           doc.setFontSize(10);
           doc.setFont('helvetica', 'bold');
+          doc.setTextColor(150, 0, 0); // Red for defects
           doc.text('Defeitos:', margin + 5, currentY);
           doc.setFont('helvetica', 'normal');
-          const txt = doc.splitTextToSize(visit.feedback.propertyDefects, contentWidth - 35);
+          doc.setTextColor(50, 50, 50);
           doc.text(txt, margin + 30, currentY);
-          currentY += (txt.length * 4) + 2;
+          currentY += blockHeight;
         }
         if (visit.feedback.generalObservations) {
+          const txt = doc.splitTextToSize(visit.feedback.generalObservations, contentWidth - 35);
+          const blockHeight = (txt.length * 4) + 5;
+          currentY = checkPageBreak(blockHeight, currentY);
+
           doc.setFontSize(10);
           doc.setFont('helvetica', 'bold');
+          doc.setTextColor(0, 58, 90);
           doc.text('Obs Geral:', margin + 5, currentY);
           doc.setFont('helvetica', 'normal');
-          const txt = doc.splitTextToSize(visit.feedback.generalObservations, contentWidth - 35);
+          doc.setTextColor(50, 50, 50);
           doc.text(txt, margin + 30, currentY);
-          currentY += (txt.length * 4) + 5;
+          currentY += blockHeight;
         }
       }
-      currentY += 5;
+      currentY += 10;
     });
   }
 
